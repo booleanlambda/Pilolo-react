@@ -1,6 +1,6 @@
 {
   "name": "pilolo-react-spa",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "dependencies": {
     "react": "^18.0.0",
@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "vite": "^4.0.0",
-     "@vitejs/plugin-react": "^4.0.0"
+    "@vitejs/plugin-react": "^4.0.0"
   },
   "scripts": {
     "dev": "vite",
