@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import Swal from 'sweetalert2';
+
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
-import ChatBox from '../components/ChatBox';
+import ChatBox from '../components/ChatBox.jsx'; // Corrected import case
 
 import 'mapbox-gl/dist/mapbox-gl.css';
-import '../Map.css';
+import '../App.css'; // Using the global App.css
 
-// Set Mapbox Access Token from your .env file
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const MapPage = () => {
@@ -23,93 +23,87 @@ const MapPage = () => {
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
 
-    // This function updates a marker's popup content
-    const updateGameMarkerPopup = useCallback((gameId, gameData) => {
-        const marker = gameMarkersRef.current[gameId]?.marker;
-        if (!marker) return;
-
-        const timeInfo = gameData.status === 'in_progress' 
-            ? `Live! Ends: ${new Date(gameData.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-            : `Starts: ${new Date(gameData.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-        const popupContent = `
-            <div class="game-popup">
-                <h3>${gameData.title}</h3>
-                <p>Prize: $${gameData.total_value} | By: ${gameData.creator_username}</p>
-                <p class="time-info">${timeInfo}</p>
-            </div>`;
-        
-        marker.getPopup().setHTML(popupContent);
-    }, []);
-
-    // Effect to fetch and display games on the map
-    useEffect(() => {
+    // --- RENDER GAME MARKERS ---
+    const fetchAndDisplayGames = useCallback(async () => {
         const map = mapRef.current;
         if (!map) return;
 
-        const fetchAndDisplayGames = async () => {
-            const { data: games } = await supabase.rpc('get_all_active_games_with_details');
-            if (!games) return;
+        const { data: games } = await supabase.rpc('get_all_active_games_with_details');
+        if (!games) return;
 
-            const activeGameIds = new Set(games.map(g => g.id));
+        const activeGameIds = new Set(games.map(g => g.id));
 
-            // Remove markers for games that are no longer active
-            Object.keys(gameMarkersRef.current).forEach(id => {
-                if (!activeGameIds.has(Number(id))) {
-                    gameMarkersRef.current[id].marker.remove();
-                    delete gameMarkersRef.current[id];
-                }
-            });
-
-            // Add or update markers for active games
-            games.forEach(game => {
-                if (!game.location?.coordinates) return;
-
-                if (gameMarkersRef.current[game.id]) {
-                    // If marker exists, just update its data
-                    gameMarkersRef.current[game.id].gameData = game;
-                    updateGameMarkerPopup(game.id, game);
-                } else {
-                    // Create a new marker with the diamond style
-                    const el = document.createElement('div');
-                    el.className = 'treasure-marker';
-
-                    const marker = new mapboxgl.Marker(el)
-                        .setLngLat(game.location.coordinates)
-                        .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }))
-                        .addTo(map);
-                    
-                    gameMarkersRef.current[game.id] = { marker, gameData: game };
-                    updateGameMarkerPopup(game.id, game);
-                }
-            });
-        };
-
-        // Fetch games when the map loads and then every 30 seconds
-        map.on('load', () => {
-            fetchAndDisplayGames();
-            const intervalId = setInterval(fetchAndDisplayGames, 30000);
-            return () => clearInterval(intervalId); // Cleanup interval
+        Object.keys(gameMarkersRef.current).forEach(id => {
+            if (!activeGameIds.has(Number(id))) {
+                gameMarkersRef.current[id].remove();
+                delete gameMarkersRef.current[id];
+            }
         });
-    }, [updateGameMarkerPopup]);
 
+        games.forEach(game => {
+            if (gameMarkersRef.current[game.id] || !game.location?.coordinates) return;
+            
+            const el = document.createElement('div');
+            el.className = 'treasure-marker'; // The animated diamond style
 
-    // Main initialization effect
+            const marker = new mapboxgl.Marker(el)
+                .setLngLat(game.location.coordinates)
+                .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`<h3>${game.title}</h3>`))
+                .addTo(map);
+
+            gameMarkersRef.current[game.id] = marker;
+        });
+    }, []);
+
+    // --- TRACK USER LOCATION ---
+    const setupPlayerLocator = useCallback(() => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        const geolocate = new mapboxgl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: true,
+            showUserHeading: true
+        });
+
+        map.addControl(geolocate);
+
+        geolocate.on('geolocate', (e) => {
+            const userLngLat = [e.coords.longitude, e.coords.latitude];
+            sessionStorage.setItem('lastLocation', JSON.stringify(userLngLat));
+        });
+
+        // Trigger the geolocate control to find the user immediately
+        map.on('load', () => {
+            geolocate.trigger();
+        });
+    }, []);
+
+    // --- INITIALIZATION EFFECT ---
     useEffect(() => {
         const user = getCachedUser();
         if (!user) { navigate('/login'); return; }
         setCurrentUser(user);
 
         if (mapRef.current) return;
+
         const lastLocation = JSON.parse(sessionStorage.getItem('lastLocation')) || [-74.006, 40.7128];
         
-        mapRef.current = new mapboxgl.Map({
+        const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: 'mapbox://styles/mapbox/dark-v11', // Dark map style
+            style: 'mapbox://styles/mapbox/dark-v11',
             center: lastLocation,
             zoom: 12
         });
-    }, [navigate]);
+        mapRef.current = map;
+
+        map.on('load', () => {
+            fetchAndDisplayGames();
+            setupPlayerLocator();
+            const intervalId = setInterval(fetchAndDisplayGames, 30000);
+            return () => clearInterval(intervalId);
+        });
+    }, [navigate, fetchAndDisplayGames, setupPlayerLocator]);
 
     return (
         <div>
@@ -117,7 +111,17 @@ const MapPage = () => {
             
             <div className="ui-panel header">
                 <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
-                {/* Header Actions */}
+                <div className="header-actions">
+                    <Link to="/how-to-play" className="header-icon-btn" title="How to Play">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+                    </Link>
+                    <Link to="/create" className="header-icon-btn" title="Create Game">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    </Link>
+                    <Link to="/profile" className="header-icon-btn" title="Profile">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M12 2a5 5 0 110 10 5 5 0 010-10zm0 12c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/></svg>
+                    </Link>
+                </div>
             </div>
 
             <div className="ui-panel bottom-bar">
