@@ -69,4 +69,25 @@ body {
 }
 
 
+.treasure-marker {
+  /* An SVG of a diamond is used as the background */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px"><path d="M12 2L2 8.5l10 13.5L22 8.5 12 2zm0 2.31L19.59 8.5 12 17.69 4.41 8.5 12 4.31z"/></svg>');
+  background-size: contain;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  /* The animation makes the marker glow */
+  animation: glow 2s infinite ease-in-out;
+}
+
+@keyframes glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 5px #ffc107);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px #fff) drop-shadow(0 0 12px #ffc107);
+  }
+}
+
+
 /* Add other specific styles for buttons, chat, etc. as needed */
