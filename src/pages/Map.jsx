@@ -22,8 +22,8 @@ const MapPage = () => {
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
 
+    // This is the revised useEffect hook
     useEffect(() => {
-        // 1. Get User
         const user = getCachedUser();
         if (!user) {
             navigate('/login');
@@ -31,10 +31,9 @@ const MapPage = () => {
         }
         setCurrentUser(user);
 
-        // 2. Prevent Map Re-initialization
-        if (mapRef.current) return;
+        // Ensure the container exists and the map isn't already initialized
+        if (mapRef.current || !mapContainerRef.current) return;
 
-        // 3. Initialize Map
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
@@ -45,7 +44,6 @@ const MapPage = () => {
 
         let intervalId = null;
 
-        // 4. Wait for map to be fully loaded before adding markers or controls
         map.on('load', () => {
             const fetchAndDisplayGames = async () => {
                 const { data: games } = await supabase.rpc('get_all_active_games_with_details');
@@ -57,7 +55,6 @@ const MapPage = () => {
                     const el = document.createElement('div');
                     el.className = 'treasure-marker';
                     const popupContent = `<div class="game-popup"><h3>${game.title}</h3><p>$${game.total_value} Prize | By: ${game.creator_username}</p></div>`;
-                    
                     const marker = new mapboxgl.Marker(el)
                         .setLngLat(game.location.coordinates)
                         .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
@@ -67,23 +64,18 @@ const MapPage = () => {
                 });
             };
 
-            // 5. Add Geolocation control
             const geolocate = new mapboxgl.GeolocateControl({
                 positionOptions: { enableHighAccuracy: true },
                 trackUserLocation: true,
                 showUserHeading: true
             });
             map.addControl(geolocate);
-            
-            // Trigger it to find location immediately
             geolocate.trigger();
 
-            // 6. Fetch games initially and then set the refresh interval
             fetchAndDisplayGames();
             intervalId = setInterval(fetchAndDisplayGames, 30000);
         });
 
-        // 7. Cleanup function returned by useEffect to clear resources
         return () => {
             if (intervalId) clearInterval(intervalId);
             if (mapRef.current) {
