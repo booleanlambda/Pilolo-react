@@ -2,15 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import Swal from 'sweetalert2';
-
-
-
-import '../Map.css'; // ✅ ADD THIS LINE
-
-// Set Mapbox Access Token...
-// ... rest of the file
-
-
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
 import ChatBox from '../components/ChatBox';
