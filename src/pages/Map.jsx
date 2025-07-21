@@ -28,46 +28,51 @@ const MapPage = () => {
     // --- DATA FETCHING ---
  // In src/pages/Map.jsx...
 // In src/pages/Map.jsx...
+// Replace the existing fetchAndDisplayGames function with this one
 
 const fetchAndDisplayGames = useCallback(async () => {
-    // DEBUG STEP 1: See if the function is running at all
-    console.log("Attempting to fetch and display games...");
-
     const map = mapRef.current;
-    if (!map) {
-        console.error("Map not available for fetching games.");
-        return;
-    }
+    if (!map) return;
 
-    const { data: games, error } = await supabase.rpc('get_all_active_games_with_details');
-
-    if (error) {
-        console.error("Error fetching games from Supabase:", error);
-        return;
-    }
-
-    // DEBUG STEP 2: See what data (if any) is returned
-    console.log("Data received from Supabase:", games);
-
+    const { data: games } = await supabase.rpc('get_all_active_games_with_details');
     if (!games) return;
 
-    games.forEach(game => {
-        // DEBUG STEP 3: Check if the code is trying to create a marker
-        console.log(`Processing marker for game: ${game.title}`);
+    const activeGameIds = new Set(games.map(g => g.game_id));
 
-        if (gameMarkersRef.current[game.id] || !game.location?.coordinates) return;
-        
+    Object.keys(gameMarkersRef.current).forEach(id => {
+        if (!activeGameIds.has(id)) {
+            gameMarkersRef.current[id].remove();
+            delete gameMarkersRef.current[id];
+        }
+    });
+
+    games.forEach(game => {
+        if (gameMarkersRef.current[game.game_id] || !game.location?.coordinates) return;
+
         const el = document.createElement('div');
         el.className = 'treasure-marker';
 
+        // ✅ This section now builds the full popup content
+        const timeInfo = game.status === 'in_progress'
+            ? `Live! Ends: ${new Date(game.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : `Starts: ${new Date(game.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+        const popupContent = `
+            <div class="game-popup">
+                <h3>${game.title}</h3>
+                <p class="game-creator">Prize: $${game.total_value} | By: ${game.creator_username}</p>
+                <p class="time-info">${timeInfo}</p>
+            </div>`;
+
         const marker = new mapboxgl.Marker(el)
             .setLngLat(game.location.coordinates)
-            .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`<h3>${game.title}</h3>`))
+            .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
             .addTo(map);
 
-        gameMarkersRef.current[game.id] = marker;
+        gameMarkersRef.current[game.game_id] = marker;
     });
 }, []);
+
 
 
 
