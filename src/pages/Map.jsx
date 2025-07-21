@@ -23,101 +23,66 @@ const MapPage = () => {
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
 
-    const fetchAndDisplayGames = useCallback(async () => {
-        const map = mapRef.current;
-        if (!map) return;
+    useEffect(() => {
+        const user = getCachedUser();
+        if (!user) { navigate('/login'); return; }
+        setCurrentUser(user);
 
-        const { data: games } = await supabase.rpc('get_all_active_games_with_details');
-        if (!games) return;
+        if (mapRef.current) return;
 
-        games.forEach(game => {
-            if (gameMarkersRef.current[game.game_id] || !game.location?.coordinates) return;
-            
-            const el = document.createElement('div');
-            el.className = 'treasure-marker';
-
-            const timeInfo = game.status === 'in_progress'
-                ? `Live! Ends: ${new Date(game.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                : `Starts: ${new Date(game.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-            const popupContent = `
-                <div class="game-popup">
-                    <h3>${game.title}</h3>
-                    <p>${game.total_value} Prize | By: ${game.creator_username}</p>
-                    <p class="time-info">${timeInfo}</p>
-                </div>`;
-
-            const marker = new mapboxgl.Marker(el)
-                .setLngLat(game.location.coordinates)
-                .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
-                .addTo(map);
-
-            gameMarkersRef.current[game.game_id] = marker;
+        const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: JSON.parse(sessionStorage.getItem('lastLocation')) || [-74.006, 40.7128],
+            zoom: 12
         });
-    }, []);
+        mapRef.current = map;
 
-    // In src/pages/Map.jsx, replace the existing useEffect with this one...
+        map.on('load', () => {
+            const fetchAndDisplayGames = async () => {
+                const { data: games } = await supabase.rpc('get_all_active_games_with_details');
+                if (!games) return;
 
-useEffect(() => {
-    const user = getCachedUser();
-    if (!user) { navigate('/login'); return; }
-    setCurrentUser(user);
+                games.forEach(game => {
+                    if (gameMarkersRef.current[game.game_id] || !game.location?.coordinates) return;
+                    
+                    const el = document.createElement('div');
+                    el.className = 'treasure-marker';
+                    const popupContent = `<div class="game-popup"><h3>${game.title}</h3><p>$${game.total_value} Prize | By: ${game.creator_username}</p></div>`;
+                    const marker = new mapboxgl.Marker(el)
+                        .setLngLat(game.location.coordinates)
+                        .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
+                        .addTo(map);
 
-    if (mapRef.current) return; // Ensures map is only initialized once
+                    gameMarkersRef.current[game.game_id] = marker;
+                });
+            };
 
-    // Initialize the map
-    const map = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: JSON.parse(sessionStorage.getItem('lastLocation')) || [-74.006, 40.7128],
-        zoom: 12
-    });
-    mapRef.current = map;
-
-    // Wait for the map to fully load before doing anything else
-    map.on('load', () => {
-        
-        // --- This function now lives inside the 'load' event ---
-        const fetchAndDisplayGames = async () => {
-            const { data: games } = await supabase.rpc('get_all_active_games_with_details');
-            if (!games) return;
-
-            games.forEach(game => {
-                if (gameMarkersRef.current[game.game_id] || !game.location?.coordinates) return;
-                
-                const el = document.createElement('div');
-                el.className = 'treasure-marker';
-
-                const marker = new mapboxgl.Marker(el)
-                    .setLngLat(game.location.coordinates)
-                    .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`<h3>${game.title}</h3>`))
-                    .addTo(map);
-
-                gameMarkersRef.current[game.game_id] = marker;
+            // Use Mapbox's control for geolocation
+            const geolocate = new mapboxgl.GeolocateControl({
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: true,
+                showUserHeading: true
             });
-        };
-        
-        // --- Location logic also runs after load ---
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(position => {
-                const userLngLat = [position.coords.longitude, position.coords.latitude];
-                map.flyTo({ center: userLngLat, zoom: 15 });
-                const el = document.createElement('div');
-                el.className = 'user-marker';
-                new mapboxgl.Marker(el).setLngLat(userLngLat).addTo(map);
-            });
-        }
+            map.addControl(geolocate);
+            
+            // Trigger it to find location on load
+            geolocate.trigger();
 
-        // --- Fetch games and set the refresh interval ---
-        fetchAndDisplayGames();
-        const intervalId = setInterval(fetchAndDisplayGames, 30000);
-        
-        // Cleanup function for when the component is unmounted
-        return () => clearInterval(intervalId);
-    });
+            // Fetch games initially and then on an interval
+            fetchAndDisplayGames();
+            const intervalId = setInterval(fetchAndDisplayGames, 30000);
+            return () => clearInterval(intervalId);
+        });
 
-}, [navigate]); // Dependency array is simplified
+    }, [navigate]);
 
-};
-
-export default MapPage;
+    return (
+        <div className="map-page-container">
+            <div ref={mapContainerRef} className="map-container" />
+            
+            <div className="ui-panel header">
+                <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
+                <div className="header-actions">
+                    <Link to="/how-to-play" className="header-icon-btn" title="How to Play">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24
