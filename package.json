@@ -18,7 +18,8 @@
     "canvas-confetti": "^1.9.3",
     "firebase": "^9.15.0",
     "mapbox-gl": "^2.15.0",
-    "sweetalert2": "^11.12.2"
+    "sweetalert2": "^11.12.2",
+    "@supabase/supabase-js": "^2.44.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.66",
