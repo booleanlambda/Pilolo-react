@@ -1,10 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
-
 import 'mapbox-gl/dist/mapbox-gl.css';
-import '../App.css';
 
-// Make sure your VITE_MAPBOX_TOKEN is set in your .env file
+// Make sure your VITE_MAPBOX_TOKEN is set in your Vercel project settings
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const MapPage = () => {
@@ -12,15 +10,7 @@ const MapPage = () => {
     const mapRef = useRef(null);
 
     useEffect(() => {
-        // Prevent the map from being initialized more than once
-        if (mapRef.current) return;
-
-        // Add a check to ensure the container element is in the DOM
-        if (!mapContainerRef.current) {
-            console.error("Map container element not found.");
-            return;
-        }
-        console.log("Map container element is ready.", mapContainerRef.current);
+        if (mapRef.current || !mapContainerRef.current) return;
 
         try {
             const map = new mapboxgl.Map({
@@ -34,13 +24,20 @@ const MapPage = () => {
             console.error("Error initializing Mapbox:", error);
         }
 
-    }, []); // Empty dependency array ensures this runs only once
+    }, []);
 
     return (
-        <div className="map-page-container">
-            <div ref={mapContainerRef} className="map-container" />
-            {/* All other UI has been temporarily removed for this test */}
-        </div>
+        // ✅ FIX: The height and width are now applied directly.
+        <div 
+            ref={mapContainerRef} 
+            style={{ 
+                position: 'absolute', 
+                top: 0, 
+                bottom: 0, 
+                width: '100%', 
+                height: '100%' 
+            }} 
+        />
     );
 };
 
