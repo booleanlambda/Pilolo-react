@@ -6,47 +6,33 @@ import * as turf from '@turf/turf';
 import confetti from 'canvas-confetti';
 
 import { supabase } from '../services/supabase';
-import { getCachedUser } from '../services/session'; // Assuming you create this service
+import { getCachedUser } from '../services/session';
 import ChatBox from '../components/ChatBox';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
-import '../Map.css'; // We will create this file for styles
+import '../Map.css';
 
-// Set Mapbox Access Token
-mapboxgl.accessToken = 'pk.eyJ1Ijoid2VtYXB6IiwiYSI6ImNtY3J0MDlqYjBwdXcyanExcTRsaG5pZXUifQ.gBtrb0P7o0ukM8HtyBcTrw';
+// Set Mapbox Access Token from your .env file
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const MapPage = () => {
     const navigate = useNavigate();
-    const mapContainer = useRef(null);
-    const map = useRef(null);
-    const userMarker = useRef(null);
-    const gameMarkers = useRef({});
+    
+    // Refs for map and markers to avoid re-renders
+    const mapContainerRef = useRef(null);
+    const mapRef = useRef(null);
+    const userMarkerRef = useRef(null);
+    const gameMarkersRef = useRef({});
 
+    // React state for managing the application
     const [currentUser, setCurrentUser] = useState(null);
     const [selectedGame, setSelectedGame] = useState(null);
     const [playerLocation, setPlayerLocation] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
-    
-    // Remember the username fix from our previous conversation
-    const handleSendMessage = useCallback(async (msg, db) => {
-        if (!msg || !selectedGame || !currentUser) return;
-        try {
-            const { collection, doc, addDoc, serverTimestamp } = await import('firebase/firestore');
-            const messagesRef = collection(db, 'chats', String(selectedGame.id), 'messages');
-            await addDoc(messagesRef, {
-                text: msg,
-                userId: currentUser.id,
-                username: currentUser.user_metadata?.username,
-                createdAt: serverTimestamp()
-            });
-        } catch (err) {
-            console.error("Error sending message:", err);
-            Swal.fire("Chat Error", "Could not send your message.", "error");
-        }
-    }, [currentUser, selectedGame]);
+    const [distance, setDistance] = useState(0);
+    const [canDig, setCanDig] = useState(false);
 
-
-    // Initialization Effect
+    // Initialize the application
     useEffect(() => {
         const user = getCachedUser();
         if (!user) {
@@ -55,40 +41,66 @@ const MapPage = () => {
         }
         setCurrentUser(user);
 
-        if (map.current) return; // Initialize map only once
-
         const lastLocation = JSON.parse(sessionStorage.getItem('lastLocation')) || [-74.006, 40.7128];
 
-        map.current = new mapboxgl.Map({
-            container: mapContainer.current,
+        if (mapRef.current) return; // Initialize map only once
+
+        mapRef.current = new mapboxgl.Map({
+            container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/navigation-night-v1',
             center: lastLocation,
             zoom: 12
         });
     }, [navigate]);
-    
-    // Additional logic for digging, joining games, etc. would go in other functions
-    // and useEffect hooks here. This is a simplified structure to get you started.
+
+    // This is a simplified combination of the logic from your original file
+    // A full implementation would require breaking this down further.
+    const checkProximity = useCallback(() => {
+        if (!playerLocation || !selectedGame) {
+            setCanDig(false);
+            return;
+        }
+        const gameCenter = turf.point(selectedGame.location.coordinates);
+        const playerPoint = turf.point(playerLocation);
+        const dist = turf.distance(playerPoint, gameCenter, { units: 'meters' });
+        
+        setDistance(dist);
+        setCanDig(dist <= 30.5); // 100 feet
+    }, [playerLocation, selectedGame]);
+
+    useEffect(() => {
+        checkProximity();
+    }, [playerLocation, selectedGame, checkProximity]);
 
     return (
         <div>
-            <div ref={mapContainer} className="map-container" />
-            {/* We would create separate components for the UI overlays */}
+            <div ref={mapContainerRef} className="map-container" />
+            
+            {/* UI Components would be built out here */}
             <div className="ui-panel header">
                 <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
-                {/* ... Header buttons */}
+                {/* Header Actions */}
             </div>
+
+            {distance > 30.5 && selectedGame && (
+                <div id="distance-info">
+                    {Math.round(distance * 3.28)} feet from game area
+                </div>
+            )}
+
             <div className="ui-panel bottom-bar">
-                <button id="digButton">DIG</button>
-                <button id="chatBtn" onClick={() => setChatOpen(!isChatOpen)}>
-                    {/* ... Chat SVG icon */}
+                <button id="digButton" className={canDig ? 'enabled' : ''} disabled={!canDig}>
+                    DIG
+                </button>
+                <button id="chatBtn" onClick={() => setChatOpen(prev => !prev)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
                 </button>
             </div>
+
             {isChatOpen && selectedGame && (
                 <ChatBox 
                     game={selectedGame}
                     currentUser={currentUser}
-                    onSendMessage={handleSendMessage}
                 />
             )}
         </div>
