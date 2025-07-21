@@ -11,7 +11,7 @@ import ChatIcon from '../components/ChatIcon.jsx';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '../App.css';
 
-// Make sure your Mapbox token is in a .env file
+// Your Mapbox token should be in a .env file (e.g., VITE_MAPBOX_TOKEN)
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const MapPage = () => {
@@ -25,18 +25,21 @@ const MapPage = () => {
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
 
-    const handleJoinGame = async (gameToJoin, playerLocation) => {
+    const handleJoinGame = async (gameToJoin) => {
         if (!currentUser) {
             return Swal.fire("Error", "You must be logged in.", "error");
         }
-        // Join game logic would go here
-        console.log("Attempting to join game:", gameToJoin.game_id, "from location:", playerLocation);
+        console.log("Attempting to join game:", gameToJoin.game_id);
         Swal.fire("Joined!", `You have joined the game: ${gameToJoin.title}`, "success");
+        // Additional logic for joining a game would go here
     };
 
     useEffect(() => {
         const user = getCachedUser();
-        if (!user) { navigate('/login'); return; }
+        if (!user) {
+            navigate('/login');
+            return;
+        }
         setCurrentUser(user);
 
         if (mapRef.current) return; // Prevents map from re-initializing
@@ -44,7 +47,7 @@ const MapPage = () => {
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: JSON.parse(sessionStorage.getItem('lastLocation')) || [-74.006, 40.7128],
+            center: [-73.7230, 40.9832], // Centered on Harrison, NY
             zoom: 12
         });
         mapRef.current = map;
@@ -53,13 +56,12 @@ const MapPage = () => {
 
         const initializeMapFeatures = () => {
             const fetchAndDisplayGames = async () => {
-                // RPC call to Supabase
                 const { data: games } = await supabase.rpc('get_all_active_games_with_details');
                 if (!games) return;
 
                 games.forEach(game => {
                     if (gameMarkersRef.current[game.game_id] || !game.location?.coordinates) return;
-                    
+
                     const el = document.createElement('div');
                     el.className = 'treasure-marker';
                     const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
@@ -69,24 +71,35 @@ const MapPage = () => {
                     el.addEventListener('click', (e) => {
                         e.stopPropagation();
                         if (activePopupRef.current) activePopupRef.current.remove();
-                        
+
+                        // Format the end time (e.g., "06:00 PM")
+                        const endTime = new Date(game.ends_at).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                        });
+
+                        // Create the detailed popup HTML structure
                         const popupContent = `
                             <div class="game-popup">
                                 <h3>${game.title}</h3>
-                                <p>Prize: $${game.total_value}</p>
-                                <button class="join-btn" id="join-btn-${game.game_id}">Join</button>
+                                <p class="details">Prize: $${game.total_value} | Treasures: ${game.treasures_count}</p>
+                                <p class="creator">by ${game.creator_username}</p>
+                                <div class="status-box">
+                                    Live! Ends at: ${endTime}
+                                </div>
+                                <button class="join-btn" id="join-btn-${game.game_id}">Join Game</button>
                             </div>`;
-                            
+
                         const popup = new mapboxgl.Popup({ offset: 25, anchor: 'bottom' })
                             .setHTML(popupContent)
                             .setLngLat(game.location.coordinates)
                             .addTo(map);
-                            
+
                         activePopupRef.current = popup;
 
                         document.getElementById(`join-btn-${game.game_id}`).addEventListener('click', () => {
-                            const playerLocation = [map.getCenter().lng, map.getCenter().lat];
-                            handleJoinGame(game, playerLocation);
+                            handleJoinGame(game);
                         });
                     });
                     gameMarkersRef.current[game.game_id] = marker;
@@ -101,13 +114,13 @@ const MapPage = () => {
 
             map.addControl(geolocate);
             map.on('idle', () => geolocate.trigger());
-            
+
             fetchAndDisplayGames();
             intervalId = setInterval(fetchAndDisplayGames, 30000); // Refresh games every 30 seconds
         };
 
         map.on('load', initializeMapFeatures);
-        
+
         return () => { // Cleanup function
             if (intervalId) clearInterval(intervalId);
             if (mapRef.current) {
