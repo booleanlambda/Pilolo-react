@@ -1,13 +1,297 @@
-/* Add this to your existing Map.css file */
+body { 
+  margin: 0; 
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+  overflow: hidden; 
+}
 
+#map { 
+  position: absolute; 
+  top: 0; 
+  bottom: 0; 
+  width: 100%; 
+}
+
+.ui-panel {
+  position: absolute; 
+  z-index: 2;
+  background: rgba(20, 20, 30, 0.75);
+  backdrop-filter: blur(10px); 
+  -webkit-backdrop-filter: blur(10px);
+  color: white; 
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+#header {
+  top: 10px; 
+  left: 10px; 
+  right: 10px; 
+  padding: 8px 12px;
+  border-radius: 12px; 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+}
+
+#header h2 { 
+  margin: 0; 
+  font-size: 16px; 
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-icon-btn {
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.header-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+#bottom-bar {
+  bottom: 20px; 
+  left: 50%; 
+  transform: translateX(-50%); 
+  padding: 10px;
+  border-radius: 50px; 
+  display: flex; 
+  align-items: center; 
+  gap: 10px;
+}
+
+#digButton {
+  padding: 12px 24px; 
+  font-size: 18px; 
+  font-weight: bold; 
+  color: white; 
+  border: none; 
+  border-radius: 30px;
+  background-color: #555; 
+  cursor: not-allowed; 
+  transition: background-color 0.2s; 
+  opacity: 0.6;
+}
+
+#digButton.enabled { 
+  background-color: #ffcc00; 
+  color: #111; 
+  cursor: pointer; 
+  opacity: 1;
+}
+
+#chatBtn { 
+  background: none; 
+  border: none; 
+  color: white; 
+  cursor: pointer; 
+  padding: 8px; 
+}
+
+#distance-info {
+    position: absolute; 
+    bottom: 100px; 
+    left: 50%; 
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6); 
+    color: #ffc107; 
+    padding: 8px 16px;
+    border-radius: 20px; 
+    font-size: 14px; 
+    font-weight: bold; 
+    z-index: 2; 
+    display: none;
+}
+
+#digs-info {
+  font-size: 14px;
+  font-weight: bold;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #ffc107;
+}
+
+#chatBox {
+  position: absolute; 
+  bottom: 90px; 
+  right: 10px; 
+  z-index: 3; 
+  width: 90%;
+  max-width: 300px; 
+  height: 350px; 
+  border-radius: 16px; 
+  display: none;
+  flex-direction: column; 
+  overflow: hidden;
+}
+
+#chatMessages { 
+  flex: 1; 
+  padding: 10px; 
+  overflow-y: auto; 
+  font-size: 14px; 
+}
+
+#chatMessages div { 
+  margin-bottom: 8px; 
+  line-height: 1.4; 
+}
+
+#chatMessages b { 
+  color: #ffc107; 
+}
+
+.chat-timestamp { 
+  font-size: 11px; 
+  color: #888; 
+  margin-left: 8px; 
+}
+
+#chatInput { 
+  display: flex; 
+  border-top: 1px solid rgba(255, 255, 255, 0.1); 
+}
+
+#chatInput input { 
+  flex: 1; 
+  padding: 12px; 
+  border: none; 
+  background: transparent; 
+  color: white; 
+}
+
+#chatInput button { 
+  background: #ffcc00; 
+  color: #111; 
+  border: none; 
+  padding: 0 15px; 
+  font-weight: bold; 
+  cursor: pointer; 
+}
+
+.mapboxgl-popup-content {
+  background: rgba(20, 20, 30, 0.85); 
+  backdrop-filter: blur(10px);
+  color: white; 
+  border-radius: 12px; 
+  padding: 15px; 
+  max-width: 240px;
+}
+
+.game-popup h3 { 
+  margin: 0 0 5px; 
+}
+
+.game-popup p { 
+  margin: 0 0 10px; 
+  font-size: 14px; 
+  color: #ccc; 
+}
+
+.game-popup .game-creator { 
+  font-size: 12px; 
+  color: #ccc; 
+  margin-top: -5px; 
+  margin-bottom: 15px; 
+}
+
+.game-popup .time-info { 
+  font-weight: bold; 
+  color: #ffc107; 
+  margin-bottom: 15px;
+}
+
+.game-popup button {
+  width: 100%; 
+  padding: 10px; 
+  border: none; 
+  border-radius: 8px;
+  font-weight: bold; 
+  color: #fff; 
+  background-color: #28a745; 
+  cursor: pointer;
+}
+
+.game-popup .button-group { 
+  display: flex; 
+  gap: 10px; 
+}
+
+.game-popup .chat-btn { 
+  background-color: #0d6efd; 
+}
+
+.game-popup .exit-btn { 
+  background-color: #dc3545; 
+}
+
+#loader-wrapper {
+    position: fixed; 
+    top: 0; 
+    left: 0;
+    width: 100%; 
+    height: 100%;
+    background-color: #12121a;
+    display: flex; 
+    flex-direction: column;
+    justify-content: center; 
+    align-items: center;
+    z-index: 1000; 
+    transition: opacity 0.5s ease;
+}
+
+.loader-text {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+
+.line-container { 
+  width: 150px; 
+}
+
+.line {
+    width: 100%; 
+    height: 2px;
+    background: #ffc107; 
+    margin: 6px 0;
+    animation: scan 1.8s ease-in-out infinite;
+    transform-origin: center;
+}
+
+.line:nth-child(2) { 
+  animation-delay: 0.15s; 
+}
+
+.line:nth-child(3) { 
+  animation-delay: 0.3s; 
+}
+
+@keyframes scan {
+    0%   { transform: scaleX(0); opacity: 0.5; }
+    50%  { transform: scaleX(1); opacity: 1; }
+    100% { transform: scaleX(0); opacity: 0.5; }
+}
+
+/* New Diamond Marker Style */
 .treasure-marker {
-  /* An SVG of a diamond is used as the background */
   background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px"><path d="M12 2L2 8.5l10 13.5L22 8.5 12 2zm0 2.31L19.59 8.5 12 17.69 4.41 8.5 12 4.31z"/></svg>');
   background-size: contain;
   width: 26px;
   height: 26px;
   cursor: pointer;
-  /* The animation makes the marker glow */
   animation: glow 2s infinite ease-in-out;
 }
 
