@@ -11,6 +11,7 @@ import ChatIcon from '../components/ChatIcon.jsx';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '../App.css';
 
+// Make sure your Mapbox token is in a .env file
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const MapPage = () => {
@@ -38,7 +39,7 @@ const MapPage = () => {
         if (!user) { navigate('/login'); return; }
         setCurrentUser(user);
 
-        if (mapRef.current) return;
+        if (mapRef.current) return; // Prevents map from re-initializing
 
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
@@ -52,6 +53,7 @@ const MapPage = () => {
 
         const initializeMapFeatures = () => {
             const fetchAndDisplayGames = async () => {
+                // RPC call to Supabase
                 const { data: games } = await supabase.rpc('get_all_active_games_with_details');
                 if (!games) return;
 
@@ -65,7 +67,7 @@ const MapPage = () => {
                         .addTo(map);
 
                     el.addEventListener('click', (e) => {
-                        e.stopPropagation(); // Prevent map click event when clicking on marker
+                        e.stopPropagation();
                         if (activePopupRef.current) activePopupRef.current.remove();
                         
                         const popupContent = `
@@ -82,13 +84,10 @@ const MapPage = () => {
                             
                         activePopupRef.current = popup;
 
-                        const joinBtn = document.getElementById(`join-btn-${game.game_id}`);
-                        if (joinBtn) {
-                            joinBtn.addEventListener('click', () => {
-                                const playerLocation = [map.getCenter().lng, map.getCenter().lat];
-                                handleJoinGame(game, playerLocation);
-                            });
-                        }
+                        document.getElementById(`join-btn-${game.game_id}`).addEventListener('click', () => {
+                            const playerLocation = [map.getCenter().lng, map.getCenter().lat];
+                            handleJoinGame(game, playerLocation);
+                        });
                     });
                     gameMarkersRef.current[game.game_id] = marker;
                 });
@@ -100,32 +99,16 @@ const MapPage = () => {
                 showUserHeading: true
             });
 
-            geolocate.on('error', (e) => {
-                console.error("Geolocation failed:", e.message);
-                Swal.fire("Geolocation Error", "Please enable location permissions to use this feature.", "warning");
-            });
-
             map.addControl(geolocate);
-
-            // Wait for the map to be fully idle before triggering geolocation
-            map.on('idle', () => {
-                geolocate.trigger();
-            });
+            map.on('idle', () => geolocate.trigger());
             
-            // Optional: Listen for the geolocate event to perform an action once location is found
-            geolocate.once('geolocate', (e) => {
-                console.log('User has been geolocated to:', [e.coords.longitude, e.coords.latitude]);
-                map.setZoom(14); // Set a closer zoom level
-            });
-
             fetchAndDisplayGames();
-            intervalId = setInterval(fetchAndDisplayGames, 30000);
+            intervalId = setInterval(fetchAndDisplayGames, 30000); // Refresh games every 30 seconds
         };
 
         map.on('load', initializeMapFeatures);
         
-        // Add a cleanup function for the effect
-        return () => {
+        return () => { // Cleanup function
             if (intervalId) clearInterval(intervalId);
             if (mapRef.current) {
                 mapRef.current.remove();
@@ -137,6 +120,7 @@ const MapPage = () => {
     return (
         <div className="map-page-container">
             <div ref={mapContainerRef} className="map-container" />
+            
             <div className="ui-panel header">
                 <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
                 <div className="header-actions">
@@ -151,12 +135,14 @@ const MapPage = () => {
                     </Link>
                 </div>
             </div>
+
             <div className="ui-panel bottom-bar">
                 <button id="digButton">DIG</button>
                 <button id="chatBtn" onClick={() => selectedGame && currentUser && setChatOpen(p => !p)} aria-label="Open Chat">
                     <ChatIcon />
                 </button>
             </div>
+
             {isChatOpen && selectedGame && currentUser && (
                 <ChatBox 
                     game={selectedGame}
