@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../services/firebase'; // Our new firebase service
+import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 
-const ChatBox = ({ game, currentUser, onSendMessage }) => {
+const ChatBox = ({ game, currentUser }) => {
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
     const messagesEndRef = useRef(null);
 
+    // Effect to subscribe to chat messages for the selected game
     useEffect(() => {
         if (!game) return;
         
@@ -14,25 +15,37 @@ const ChatBox = ({ game, currentUser, onSendMessage }) => {
         const q = query(messagesRef, orderBy('createdAt', 'asc'));
 
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const msgs = [];
-            querySnapshot.forEach((doc) => {
-                msgs.push({ id: doc.id, ...doc.data() });
-            });
+            const msgs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setMessages(msgs);
         });
 
-        return () => unsubscribe();
+        return () => unsubscribe(); // Cleanup subscription on component unmount
     }, [game]);
 
+    // Effect to auto-scroll to the latest message
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    const handleSubmit = (e) => {
+    const handleSendMessage = async (e) => {
         e.preventDefault();
-        if (newMessage.trim() === "") return;
-        onSendMessage(newMessage.trim(), db); // Use the passed-in send function
-        setNewMessage("");
+        const msg = newMessage.trim();
+        if (!msg) return;
+
+        try {
+            const messagesRef = collection(db, 'chats', String(game.id), 'messages');
+            await addDoc(messagesRef, {
+                text: msg,
+                userId: currentUser.id,
+                // ✅ THE FIX: Using the correct username property
+                username: currentUser.user_metadata?.username,
+                createdAt: serverTimestamp()
+            });
+            setNewMessage("");
+        } catch (err) {
+            console.error("Error sending message:", err);
+            // You could add a user-facing error here
+        }
     };
 
     return (
@@ -45,7 +58,7 @@ const ChatBox = ({ game, currentUser, onSendMessage }) => {
                 ))}
                 <div ref={messagesEndRef} />
             </div>
-            <form onSubmit={handleSubmit} className="chat-input">
+            <form onSubmit={handleSendMessage} className="chat-input">
                 <input
                     type="text"
                     value={newMessage}
