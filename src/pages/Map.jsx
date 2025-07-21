@@ -27,6 +27,7 @@ const MapPage = () => {
     
     // --- DATA FETCHING ---
  // In src/pages/Map.jsx...
+// In src/pages/Map.jsx...
 
 const fetchAndDisplayGames = useCallback(async () => {
     // DEBUG STEP 1: See if the function is running at all
@@ -67,6 +68,8 @@ const fetchAndDisplayGames = useCallback(async () => {
         gameMarkersRef.current[game.id] = marker;
     });
 }, []);
+
+
 
 
     // --- INITIALIZATION & PERMISSIONS ---
