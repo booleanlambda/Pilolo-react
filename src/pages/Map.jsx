@@ -18,13 +18,11 @@ const MapPage = () => {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const gameMarkersRef = useRef({});
-    const activePopupRef = useRef(null);
 
     const [currentUser, setCurrentUser] = useState(null);
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
 
-    // --- Game Logic ---
     const handleJoinGame = async (gameToJoin, playerLocation) => {
         if (!currentUser) return Swal.fire("Error", "You must be logged in.", "error");
 
@@ -41,10 +39,8 @@ const MapPage = () => {
 
         Swal.fire("Joined!", "You have successfully joined the game.", "success");
         setSelectedGame(gameToJoin);
-        if (activePopupRef.current) activePopupRef.current.remove();
     };
 
-    // --- Main Initialization Effect ---
     useEffect(() => {
         const user = getCachedUser();
         if (!user) { navigate('/login'); return; }
@@ -72,30 +68,30 @@ const MapPage = () => {
                     
                     const el = document.createElement('div');
                     el.className = 'treasure-marker';
+                    
+                    const timeInfo = `Starts at: ${new Date(game.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                    const popupContent = `<div class="game-popup"><h3>${game.title}</h3><p>Prize: $${game.total_value} | Treasures: ${game.treasure_count}</p><p>by ${game.creator_username}</p><p class="time-info">${timeInfo}</p><button class="join-btn" id="join-btn-${game.game_id}">Join Game</button></div>`;
+                    
+                    const popup = new mapboxgl.Popup({ offset: 25, anchor: 'bottom' })
+                        .setHTML(popupContent);
 
-                    const popup = new mapboxgl.Popup({ offset: 25, anchor: 'bottom', closeOnClick: false });
+                    // ✅ FIX: Bind the popup directly to the marker and let Mapbox handle clicks.
+                    const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+                        .setLngLat(game.location.coordinates)
+                        .setPopup(popup) // Bind the popup here
+                        .addTo(map);
 
-                    el.addEventListener('click', () => {
-                        const timeInfo = `Starts at: ${new Date(game.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                        const popupContent = `
-                            <div class="game-popup">
-                                <h3>${game.title}</h3>
-                                <p>Prize: $${game.total_value} | Treasures: ${game.treasure_count}</p>
-                                <p>by ${game.creator_username}</p>
-                                <p class="time-info">${timeInfo}</p>
-                                <button class="join-btn" id="join-btn-${game.game_id}">Join Game</button>
-                            </div>`;
-                        
-                        popup.setLngLat(game.location.coordinates).setHTML(popupContent).addTo(map);
-                        activePopupRef.current = popup;
-
-                        document.getElementById(`join-btn-${game.game_id}`).addEventListener('click', () => {
-                            const playerLocation = map.getCenter(); // Use current map center as player location
-                            handleJoinGame(game, [playerLocation.lng, playerLocation.lat]);
-                        });
+                    // When the popup opens, find the button inside it and add our click listener
+                    popup.on('open', () => {
+                        const joinButton = document.getElementById(`join-btn-${game.game_id}`);
+                        if (joinButton) {
+                            joinButton.addEventListener('click', () => {
+                                const playerLocation = map.getCenter();
+                                handleJoinGame(game, [playerLocation.lng, playerLocation.lat]);
+                            });
+                        }
                     });
 
-                    const marker = new mapboxgl.Marker(el).setLngLat(game.location.coordinates).addTo(map);
                     gameMarkersRef.current[game.game_id] = marker;
                 });
             };
@@ -110,16 +106,13 @@ const MapPage = () => {
 
         return () => {
             if (intervalId) clearInterval(intervalId);
-            if (mapRef.current) {
-                mapRef.current.remove();
-                mapRef.current = null;
-            }
+            if (mapRef.current) mapRef.current.remove();
         };
     }, [navigate]);
 
     return (
         <div className="map-page-container">
-            <div ref={mapContainerRef} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} />
+            <div ref={mapContainerRef} className="map-container" />
             
             <div className="ui-panel header">
                 <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
