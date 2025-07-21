@@ -18,6 +18,33 @@ body {
   height: 100vh;
 }
 
+
+/* In App.css */
+
+.map-page-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* --- ADD THIS CODE --- */
+.map-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+/* --------------------- */
+
+
+/* --- MARKER STYLES --- */
+.user-marker, .treasure-marker {
+  cursor: pointer;
+  /* ... rest of your styles */
+}
+
+
 /* --- MARKER STYLES --- */
 .user-marker, .treasure-marker {
   cursor: pointer;
