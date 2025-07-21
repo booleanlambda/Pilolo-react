@@ -13,7 +13,12 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.24.0",
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "@turf/turf": "^6.5.0",
+    "canvas-confetti": "^1.9.3",
+    "firebase": "^9.15.0",
+    "mapbox-gl": "^2.15.0",
+    "sweetalert2": "^11.12.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.66",
