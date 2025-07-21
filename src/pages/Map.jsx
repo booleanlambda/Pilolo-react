@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import Swal from 'sweetalert2';
+import * as turf from '@turf/turf';
 
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
-import ChatBox from '../components/ChatBox.jsx'; // Corrected import case
+import ChatBox from '../components/Chatbox.jsx';
+import ChatIcon from '../components/ChatIcon.jsx';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
-import '../App.css'; // Using the global App.css
+import '../App.css';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -22,64 +24,27 @@ const MapPage = () => {
     const [currentUser, setCurrentUser] = useState(null);
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
-
-    // --- RENDER GAME MARKERS ---
+    
+    // --- DATA FETCHING ---
     const fetchAndDisplayGames = useCallback(async () => {
         const map = mapRef.current;
         if (!map) return;
-
         const { data: games } = await supabase.rpc('get_all_active_games_with_details');
         if (!games) return;
-
-        const activeGameIds = new Set(games.map(g => g.id));
-
-        Object.keys(gameMarkersRef.current).forEach(id => {
-            if (!activeGameIds.has(Number(id))) {
-                gameMarkersRef.current[id].remove();
-                delete gameMarkersRef.current[id];
-            }
-        });
-
+        
         games.forEach(game => {
             if (gameMarkersRef.current[game.id] || !game.location?.coordinates) return;
-            
             const el = document.createElement('div');
-            el.className = 'treasure-marker'; // The animated diamond style
-
+            el.className = 'treasure-marker';
             const marker = new mapboxgl.Marker(el)
                 .setLngLat(game.location.coordinates)
                 .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`<h3>${game.title}</h3>`))
                 .addTo(map);
-
             gameMarkersRef.current[game.id] = marker;
         });
     }, []);
 
-    // --- TRACK USER LOCATION ---
-    const setupPlayerLocator = useCallback(() => {
-        const map = mapRef.current;
-        if (!map) return;
-
-        const geolocate = new mapboxgl.GeolocateControl({
-            positionOptions: { enableHighAccuracy: true },
-            trackUserLocation: true,
-            showUserHeading: true
-        });
-
-        map.addControl(geolocate);
-
-        geolocate.on('geolocate', (e) => {
-            const userLngLat = [e.coords.longitude, e.coords.latitude];
-            sessionStorage.setItem('lastLocation', JSON.stringify(userLngLat));
-        });
-
-        // Trigger the geolocate control to find the user immediately
-        map.on('load', () => {
-            geolocate.trigger();
-        });
-    }, []);
-
-    // --- INITIALIZATION EFFECT ---
+    // --- INITIALIZATION & PERMISSIONS ---
     useEffect(() => {
         const user = getCachedUser();
         if (!user) { navigate('/login'); return; }
@@ -87,23 +52,46 @@ const MapPage = () => {
 
         if (mapRef.current) return;
 
-        const lastLocation = JSON.parse(sessionStorage.getItem('lastLocation')) || [-74.006, 40.7128];
+        const defaultCenter = [-74.006, 40.7128]; // Default center
         
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: lastLocation,
+            center: defaultCenter,
             zoom: 12
         });
         mapRef.current = map;
 
         map.on('load', () => {
             fetchAndDisplayGames();
-            setupPlayerLocator();
+            
+            // ✅ Explicitly ask for and handle location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLngLat = [position.coords.longitude, position.coords.latitude];
+                        sessionStorage.setItem('lastLocation', JSON.stringify(userLngLat));
+                        map.flyTo({ center: userLngLat, zoom: 15 });
+
+                        // Create the user marker
+                        const el = document.createElement('div');
+                        el.className = 'user-marker'; // You can style this in App.css
+                        userMarkerRef.current = new mapboxgl.Marker(el).setLngLat(userLngLat).addTo(map);
+                    },
+                    (error) => {
+                        console.error("Geolocation error:", error);
+                        Swal.fire('Location Error', 'Could not get your location. Please ensure location services are enabled.', 'warning');
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                Swal.fire('Unsupported', 'Geolocation is not supported by your browser.', 'error');
+            }
+
             const intervalId = setInterval(fetchAndDisplayGames, 30000);
             return () => clearInterval(intervalId);
         });
-    }, [navigate, fetchAndDisplayGames, setupPlayerLocator]);
+    }, [navigate, fetchAndDisplayGames]);
 
     return (
         <div>
@@ -127,7 +115,7 @@ const MapPage = () => {
             <div className="ui-panel bottom-bar">
                 <button id="digButton">DIG</button>
                 <button id="chatBtn" onClick={() => selectedGame && setChatOpen(p => !p)}>
-                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                    <ChatIcon />
                 </button>
             </div>
 
