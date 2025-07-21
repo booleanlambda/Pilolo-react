@@ -26,23 +26,48 @@ const MapPage = () => {
     const [isChatOpen, setChatOpen] = useState(false);
     
     // --- DATA FETCHING ---
-    const fetchAndDisplayGames = useCallback(async () => {
-        const map = mapRef.current;
-        if (!map) return;
-        const { data: games } = await supabase.rpc('get_all_active_games_with_details');
-        if (!games) return;
+ // In src/pages/Map.jsx...
+
+const fetchAndDisplayGames = useCallback(async () => {
+    // DEBUG STEP 1: See if the function is running at all
+    console.log("Attempting to fetch and display games...");
+
+    const map = mapRef.current;
+    if (!map) {
+        console.error("Map not available for fetching games.");
+        return;
+    }
+
+    const { data: games, error } = await supabase.rpc('get_all_active_games_with_details');
+
+    if (error) {
+        console.error("Error fetching games from Supabase:", error);
+        return;
+    }
+
+    // DEBUG STEP 2: See what data (if any) is returned
+    console.log("Data received from Supabase:", games);
+
+    if (!games) return;
+
+    games.forEach(game => {
+        // DEBUG STEP 3: Check if the code is trying to create a marker
+        console.log(`Processing marker for game: ${game.title}`);
+
+        if (gameMarkersRef.current[game.id] || !game.location?.coordinates) return;
         
-        games.forEach(game => {
-            if (gameMarkersRef.current[game.id] || !game.location?.coordinates) return;
-            const el = document.createElement('div');
-            el.className = 'treasure-marker';
-            const marker = new mapboxgl.Marker(el)
-                .setLngLat(game.location.coordinates)
-                .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`<h3>${game.title}</h3>`))
-                .addTo(map);
-            gameMarkersRef.current[game.id] = marker;
-        });
-    }, []);
+        const el = document.createElement('div');
+        el.className = 'treasure-marker';
+
+        const marker = new mapboxgl.Marker(el)
+            .setLngLat(game.location.coordinates)
+            .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`<h3>${game.title}</h3>`))
+            .addTo(map);
+
+        gameMarkersRef.current[game.id] = marker;
+    });
+}, []);
+
 
     // --- INITIALIZATION & PERMISSIONS ---
     useEffect(() => {
