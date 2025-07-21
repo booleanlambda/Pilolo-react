@@ -6,7 +6,7 @@ import * as turf from '@turf/turf';
 
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
-import ChatBox from '../components/Chatbox.jsx';
+import ChatBox from '../components/ChatBox.jsx';
 import ChatIcon from '../components/ChatIcon.jsx';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
