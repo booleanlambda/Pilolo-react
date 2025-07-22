@@ -18,16 +18,6 @@ body {
   height: 100vh;
 }
 
-
-/* In App.css */
-
-.map-page-container {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-}
-
-/* --- ADD THIS CODE --- */
 .map-container {
   position: absolute;
   top: 0;
@@ -35,32 +25,117 @@ body {
   width: 100%;
   height: 100%;
 }
-/* --------------------- */
 
+/* ==========================================================================
+   UI Panels (Header & Bottom Bar)
+   ========================================================================== */
 
-/* --- MARKER STYLES --- */
-.user-marker, .treasure-marker {
+.ui-panel {
+  position: absolute;
+  z-index: 15;
+  background: rgba(20, 20, 30, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.header {
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header .nav-countdown {
+  font-size: 0.8em;
+  font-weight: normal;
+  color: var(--brand-yellow);
+}
+
+#digs-info {
+  font-size: 14px;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-icon-btn {
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  /* ... rest of your styles */
+  transition: background-color 0.2s;
 }
 
+.header-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
 
-/* --- MARKER STYLES --- */
-.user-marker, .treasure-marker {
+.bottom-bar {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#digButton {
+  padding: 12px 24px;
+  font-size: 18px;
+  font-weight: bold;
+  color: white;
+  border: none;
+  border-radius: 30px;
+  background-color: #555;
+  cursor: not-allowed;
+  transition: background-color 0.2s, opacity 0.2s;
+  opacity: 0.7;
+}
+
+#digButton.enabled {
+  background-color: var(--brand-yellow);
+  color: #111;
   cursor: pointer;
-  background-size: contain;
-  background-repeat: no-repeat;
-  width: 28px;
-  height: 28px;
-  animation: pulse 2.5s infinite ease-in-out;
-  z-index: 3;
+  opacity: 1;
 }
 
-.user-marker {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2300ffcc" width="24px" height="24px"><circle cx="12" cy="12" r="10"/></svg>');
+#chatBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
-/* In src/App.css */
+/* ==========================================================================
+   Markers & Popups
+   ========================================================================== */
 
 .treasure-marker {
   cursor: pointer;
@@ -69,12 +144,10 @@ body {
   background-repeat: no-repeat;
   width: 28px;
   height: 28px;
-  z-index: 3;
-  /* ✅ FIX: Use the 'glow' animation which doesn't affect position */
+  z-index: 5;
   animation: glow 2.5s infinite ease-in-out;
 }
 
-/* ✅ FIX: A new animation that only affects the filter property */
 @keyframes glow {
   0%, 100% {
     filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 7px var(--brand-yellow));
@@ -84,10 +157,15 @@ body {
   }
 }
 
+.mapboxgl-popup {
+  z-index: 10;
+  animation: fadeIn 0.3s ease-out;
+}
 
-/* --- POPUP STYLES --- */
-.mapboxgl-popup { animation: fadeIn 0.3s ease-out; }
-@keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 .mapboxgl-popup-content {
   background: rgba(20, 20, 30, 0.9) !important;
@@ -97,24 +175,15 @@ body {
   box-shadow: 0 5px 15px rgba(0,0,0,0.3) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
-.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip { border-top-color: rgba(20, 20, 30, 0.9) !important; }
 
-.game-popup h3 { margin: 0 0 8px; font-size: 16px; }
-.game-popup p { margin: 4px 0; font-size: 14px; color: #ccc; }
-.game-popup .time-info { font-weight: bold; color: var(--brand-yellow); margin-top: 10px; }
-.game-popup .join-btn {
-    background-color: var(--success-color);
-    color: white;
-    border: none;
-    padding: 10px;
-    width: 100%;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-    margin-top: 15px;
+.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+  border-top-color: rgba(20, 20, 30, 0.9) !important;
 }
 
-/* Add to your App.css or relevant stylesheet */
+.game-popup h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
 
 .game-popup .details {
   font-size: 0.9em;
@@ -129,8 +198,8 @@ body {
 }
 
 .game-popup .status-box {
-  background-color: rgba(50, 205, 50, 0.2); /* Greenish highlight */
-  border-left: 3px solid #32CD32; /* Lime green */
+  background-color: rgba(50, 205, 50, 0.2);
+  border-left: 3px solid #32CD32;
   padding: 8px;
   border-radius: 4px;
   margin-bottom: 12px;
@@ -139,87 +208,102 @@ body {
 }
 
 .game-popup .join-btn {
-  background-color: #2E8B57; /* SeaGreen */
+  background-color: var(--success-color);
   color: white;
   width: 100%;
   padding: 10px;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 1em;
   font-weight: bold;
+  margin-top: 15px;
+  transition: background-color 0.2s;
 }
 
 .game-popup .join-btn:hover {
-  background-color: #3CB371; /* MediumSeaGreen */
+  background-color: #3CB371;
 }
 
-
-
-
-/* --- UI Panel Styles --- */
-.ui-panel { position: absolute; z-index: 2; background: rgba(20, 20, 30, 0.75); backdrop-filter: blur(10px); color: white; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.header { top: 10px; left: 10px; right: 10px; padding: 8px 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
-.header h2 { margin: 0; font-size: 16px; }
-.header-actions { display: flex; align-items: center; gap: 10px; }
-.header-icon-btn { padding: 8px; background: rgba(255, 255, 255, 0.2); border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.bottom-bar { bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px; border-radius: 50px; display: flex; align-items: center; gap: 10px; }
-#digButton { padding: 12px 24px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 30px; background-color: #555; }
-#chatBtn { background: none; border: none; }
-
-
-/* Add to App.css to fix the bottom buttons */
-
-/* In App.css */
-
-
-/* In App.css */
-
-.bottom-bar {
-  /* FIX: Lift the bar higher from the bottom edge */
-  bottom: 100px;
-
-  /* FIX: Ensure it doesn't touch the left/right edges */
-  left: 20px;
-  right: 20px;
-
-  /* This remains the same but is now more effective */
-  transform: translateX(-50%);
-  
-  /* Reset left to its default behavior after transform */
-  left: 50%; 
-  width: auto; /* Allow the bar to size to its content */
-  
-  /* More generous padding for mobile home indicators */
-  padding: 10px 20px calc(15px + env(safe-area-inset-bottom));
+.game-popup .exit-btn {
+    background-color: #dc3545; /* Red for exit */
 }
 
-/* In App.css */
+/* ==========================================================================
+   Chat Overlay
+   ========================================================================== */
 
-/* FIX: Ensure popups are always on top of markers */
-.treasure-marker {
-  z-index: 5;
-}
-.mapboxgl-popup {
-  z-index: 10;
-}
-
-/* FIX: Style for the chat container to make it a floating panel */
-.chat-container {
+.chat-messages-overlay {
   position: absolute;
-  bottom: 90px;
-  right: 15px;
-  width: 90%;
-  max-width: 320px;
-  height: 400px;
-  z-index: 20;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 95%;
+  max-width: 600px;
+  height: 40vh;
+  overflow-y: auto;
   display: flex;
-  flex-direction: column;
-  background: rgba(20, 20, 30, 0.85);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  overflow: hidden; /* Ensures ChatBox conforms to the rounded corners */
+  flex-direction: column-reverse;
+  padding: 10px;
+  background: transparent;
+  pointer-events: none;
+  z-index: 20;
 }
 
+.chat-messages-overlay > div {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.4);
+  margin-top: 5px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  color: white;
+  width: fit-content;
+  max-width: 80%;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+.chat-messages-overlay .chat-message {
+  align-self: flex-start;
+}
+
+.chat-input-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 500px;
+  display: flex;
+  background: rgba(20, 20, 30, 0.75);
+  backdrop-filter: blur(10px);
+  border-radius: 50px;
+  padding: 5px 5px 5px 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 20;
+  padding-bottom: calc(5px + env(safe-area-inset-bottom));
+}
+
+.chat-input-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 16px;
+  outline: none;
+}
+
+.chat-input-bar button {
+  border: none;
+  background: var(--brand-yellow);
+  color: #111;
+  font-weight: bold;
+  border-radius: 50px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-input-bar button:hover {
+  background: #ffd633;
+}
