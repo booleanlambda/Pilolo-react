@@ -205,7 +205,8 @@ const MapPage = () => {
     useEffect(() => {
         const updateDigCounts = async () => {
             if (!currentUser || !selectedGame) { setDigCounts(null); return; }
-            const { data } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.id });
+            // FIXED: Changed selectedGame.id to selectedGame.game_id
+            const { data } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.game_id });
             const counts = data?.[0];
             if (counts) {
                 setDigCounts({
@@ -233,10 +234,10 @@ const MapPage = () => {
     const handleDig = async () => {
         if (!canDig) return;
         try {
-            // FIXED: Ensured all four parameters are sent in the RPC call
+            // FIXED: Changed selectedGame.id to selectedGame.game_id
             const { data, error } = await supabase.rpc('dig_treasure', {
                 user_id_input: currentUser.id,
-                game_id_input: selectedGame.id,
+                game_id_input: selectedGame.game_id,
                 longitude: playerLocation[0],
                 latitude: playerLocation[1]
             });
@@ -259,7 +260,7 @@ const MapPage = () => {
                     Swal.fire('Unknown Outcome', 'Received an unexpected response.', 'question');
             }
             // After a dig, refresh the dig counts
-            const { data: countsData } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.id });
+            const { data: countsData } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.game_id });
             const counts = countsData?.[0];
             if (counts) {
                 setDigCounts({
