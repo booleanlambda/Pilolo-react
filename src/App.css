@@ -166,3 +166,20 @@ body {
 .bottom-bar { bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px; border-radius: 50px; display: flex; align-items: center; gap: 10px; }
 #digButton { padding: 12px 24px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 30px; background-color: #555; }
 #chatBtn { background: none; border: none; }
+
+
+/* Add to App.css to fix the bottom buttons */
+
+.bottom-bar {
+  /* Adds padding plus space for the phone's safe area inset (the home bar) */
+  padding-bottom: calc(15px + env(safe-area-inset-bottom));
+}
+
+/* You might want to adjust the status box for the new, longer text */
+.status-box {
+    font-size: 0.9em;
+    text-align: center;
+}
+
+
+
