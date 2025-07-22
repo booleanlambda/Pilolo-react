@@ -138,7 +138,6 @@ const MapPage = () => {
             const checkForActiveGame = async () => {
                 const { data: activeGameGroup } = await supabase.from('user_groups').select('game_id').eq('user_id', user.id).eq('is_active', true).single();
                 if (activeGameGroup) {
-                    // We need to wait for the main games list to be fetched to find the full game object
                     const allGames = await supabase.rpc('get_all_active_games_with_details');
                     if (allGames.data) {
                         const activeGame = allGames.data.find(g => g.game_id === activeGameGroup.game_id);
@@ -234,6 +233,7 @@ const MapPage = () => {
     const handleDig = async () => {
         if (!canDig) return;
         try {
+            // FIXED: Ensured all four parameters are sent in the RPC call
             const { data, error } = await supabase.rpc('dig_treasure', {
                 user_id_input: currentUser.id,
                 game_id_input: selectedGame.id,
