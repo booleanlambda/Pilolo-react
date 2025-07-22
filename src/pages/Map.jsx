@@ -85,30 +85,41 @@ const MapPage = () => {
         }, 1000);
     };
 
-    // Effect for ONE-TIME setup of the map, user, and data fetching interval
+    // FIX: This new useEffect ensures the join/exit handlers always have fresh data.
     useEffect(() => {
-        if (mapRef.current) return;
-
-        const user = getCachedUser();
-        if (!user) { navigate('/login'); return; }
-        setCurrentUser(user);
-
         window.handleJoinGame = async (gameId) => {
             const gameToJoin = games.find(g => g.game_id === gameId);
-            if (!gameToJoin || !user || !playerLocation) return;
+            if (!gameToJoin || !currentUser || !playerLocation) {
+                return Swal.fire('Error', 'Could not get user, location, or game data to join.', 'error');
+            }
             const { data, error } = await supabase.rpc('join_game', {
-                user_id_input: user.id, game_id_input: gameId,
+                user_id_input: currentUser.id, game_id_input: gameId,
                 player_lon: playerLocation[0], player_lat: playerLocation[1]
             });
             if (error || (data && data.startsWith('Error:'))) return Swal.fire('Could Not Join', data?.replace('Error: ', '') || error.message, 'warning');
             Swal.fire("Joined!", `You have joined the game: ${gameToJoin.title}`, "success");
             setSelectedGame(gameToJoin);
         };
+
         window.handleExitGame = () => {
             Swal.fire("Exited", "You have left the game.", "info");
             setSelectedGame(null);
             setChatOpen(false);
         };
+
+        return () => {
+            delete window.handleJoinGame;
+            delete window.handleExitGame;
+        };
+    }, [games, currentUser, playerLocation]); // Dependencies ensure functions are always up-to-date
+
+    // Main setup effect - runs only once
+    useEffect(() => {
+        if (mapRef.current) return;
+
+        const user = getCachedUser();
+        if (!user) { navigate('/login'); return; }
+        setCurrentUser(user);
 
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
@@ -153,12 +164,10 @@ const MapPage = () => {
         return () => {
             if (mapRef.current) mapRef.current.remove();
             clearInterval(activeCountdownInterval.current);
-            delete window.handleJoinGame;
-            delete window.handleExitGame;
         };
     }, [navigate]);
 
-    // Effect to sync markers with the `games` state
+    // Effect to sync markers with the `games` and `selectedGame` states
     useEffect(() => {
         if (!mapRef.current || !mapRef.current.isStyleLoaded()) return;
         const map = mapRef.current;
