@@ -54,6 +54,47 @@ const MapPage = () => {
     const [playerLocation, setPlayerLocation] = useState(null);
     const [canDig, setCanDig] = useState(false);
     const [isChatOpen, setChatOpen] = useState(false);
+    const [navCountdownText, setNavCountdownText] = useState(''); // State for the nav timer
+
+    // Effect for the navigation countdown timer
+    useEffect(() => {
+        if (!selectedGame) {
+            setNavCountdownText('');
+            return;
+        }
+
+        let targetTime;
+        let prefix = '';
+
+        if (selectedGame.status === 'pending' && new Date(selectedGame.start_time) > new Date()) {
+            targetTime = new Date(selectedGame.start_time).getTime();
+            prefix = 'Starts in: ';
+        } else if (selectedGame.status === 'in_progress') {
+            const endTime = new Date(selectedGame.start_time);
+            endTime.setMinutes(0, 0, 0);
+            endTime.setHours(endTime.getHours() + 1);
+            targetTime = endTime.getTime();
+            prefix = 'Ends in: ';
+        } else {
+            setNavCountdownText('');
+            return;
+        }
+
+        const intervalId = setInterval(() => {
+            const distance = targetTime - new Date().getTime();
+            if (distance < 0) {
+                setNavCountdownText("Updating status...");
+                clearInterval(intervalId);
+                return;
+            }
+            const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((distance % (1000 * 60)) / 1000);
+            setNavCountdownText(`${prefix}${h}h ${m}m ${s}s`);
+        }, 1000);
+
+        return () => clearInterval(intervalId);
+    }, [selectedGame]);
 
     const startCountdown = (game) => {
         if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
@@ -205,7 +246,6 @@ const MapPage = () => {
     useEffect(() => {
         const updateDigCounts = async () => {
             if (!currentUser || !selectedGame) { setDigCounts(null); return; }
-            // FIXED: Changed selectedGame.id to selectedGame.game_id
             const { data } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.game_id });
             const counts = data?.[0];
             if (counts) {
@@ -234,7 +274,6 @@ const MapPage = () => {
     const handleDig = async () => {
         if (!canDig) return;
         try {
-            // FIXED: Changed selectedGame.id to selectedGame.game_id
             const { data, error } = await supabase.rpc('dig_treasure', {
                 user_id_input: currentUser.id,
                 game_id_input: selectedGame.game_id,
@@ -259,7 +298,6 @@ const MapPage = () => {
                 default:
                     Swal.fire('Unknown Outcome', 'Received an unexpected response.', 'question');
             }
-            // After a dig, refresh the dig counts
             const { data: countsData } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.game_id });
             const counts = countsData?.[0];
             if (counts) {
@@ -277,7 +315,10 @@ const MapPage = () => {
         <div className="map-page-container">
             <div ref={mapContainerRef} className="map-container" />
             <div className="ui-panel header">
-                <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
+                <h2>
+                    {selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}
+                    {navCountdownText && <span className="nav-countdown"> | {navCountdownText}</span>}
+                </h2>
                 {selectedGame && digCounts && (
                     <div id="digs-info">
                         <span>Digs: {digCounts.standard}</span> | <span>Bonus: {digCounts.bonus}</span>
