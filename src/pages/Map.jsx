@@ -7,7 +7,6 @@ import confetti from 'canvas-confetti';
 
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
-// ChatBox component is no longer needed here
 import ChatIcon from '../components/ChatIcon.jsx';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -56,13 +55,10 @@ const MapPage = () => {
     const [canDig, setCanDig] = useState(false);
     const [isChatOpen, setChatOpen] = useState(false);
     const [navCountdownText, setNavCountdownText] = useState('');
-    
-    // State for new chat implementation
     const [messages, setMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
 
 
-    // Effect for the navigation countdown timer
     useEffect(() => {
         if (!selectedGame) {
             setNavCountdownText('');
@@ -100,19 +96,14 @@ const MapPage = () => {
         return () => clearInterval(intervalId);
     }, [selectedGame]);
 
-    // Effect for handling real-time chat messages
     useEffect(() => {
         if (!selectedGame) return;
-
-        // Fetch initial messages
         const fetchMessages = async () => {
             const { data } = await supabase.from('chat_messages')
                 .select('*').eq('game_id', selectedGame.game_id).order('created_at');
             setMessages(data || []);
         };
         fetchMessages();
-
-        // Subscribe to new messages
         const channel = supabase.channel(`chat:${selectedGame.game_id}`)
             .on('postgres_changes', {
                 event: 'INSERT',
@@ -122,14 +113,11 @@ const MapPage = () => {
             }, (payload) => {
                 setMessages(currentMessages => [...currentMessages, payload.new]);
             }).subscribe();
-
-        // Cleanup function
         return () => {
             supabase.removeChannel(channel);
         };
     }, [selectedGame]);
     
-    // Effect to scroll chat to the bottom
     useEffect(() => {
         chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -150,7 +138,7 @@ const MapPage = () => {
         if (error) {
             Swal.fire('Error', 'Could not send message.', 'error');
         } else {
-            setChatInput(''); // Clear input on successful send
+            setChatInput('');
         }
     };
 
@@ -158,7 +146,6 @@ const MapPage = () => {
         if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
         const countdownId = `countdown-${game.game_id}`;
         let targetTime;
-
         if (game.status === 'pending') {
             targetTime = new Date(game.start_time).getTime();
         } else if (game.status === 'in_progress') {
@@ -243,7 +230,8 @@ const MapPage = () => {
                 positionOptions: { enableHighAccuracy: true },
                 trackUserLocation: true, showUserHeading: true
             });
-            map.addControl(geolocate);
+            // FIXED: Explicitly set position to prepare for CSS override
+            map.addControl(geolocate, 'top-right');
             geolocate.on('geolocate', (e) => setPlayerLocation([e.coords.longitude, e.coords.latitude]));
             setTimeout(() => geolocate.trigger(), 500);
 
@@ -379,7 +367,6 @@ const MapPage = () => {
                 </button>
             </div>
 
-            {/* New Chat UI */}
             {isChatOpen && selectedGame && (
                 <>
                     <div className="chat-messages-overlay">
