@@ -172,15 +172,24 @@ body {
 
 /* In App.css */
 
-.bottom-bar {
-  /* FIX: Increased bottom value to lift the bar higher */
-  bottom: 15px;
-  /* FIX: Ensures padding for mobile home indicators and adds top padding */
-  padding: 10px 15px calc(15px + env(safe-area-inset-bottom));
-}
 
-/* Style for the new countdown timer in the popup */
-.countdown-timer {
-  font-weight: bold;
-  color: #ffc107; /* Amber color */
+/* In App.css */
+
+.bottom-bar {
+  /* FIX: Lift the bar higher from the bottom edge */
+  bottom: 25px;
+
+  /* FIX: Ensure it doesn't touch the left/right edges */
+  left: 20px;
+  right: 20px;
+
+  /* This remains the same but is now more effective */
+  transform: translateX(-50%);
+  
+  /* Reset left to its default behavior after transform */
+  left: 50%; 
+  width: auto; /* Allow the bar to size to its content */
+  
+  /* More generous padding for mobile home indicators */
+  padding: 10px 20px calc(15px + env(safe-area-inset-bottom));
 }
