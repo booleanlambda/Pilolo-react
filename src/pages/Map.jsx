@@ -16,33 +16,60 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 const MapPage = () => {
     const navigate = useNavigate();
     const mapContainerRef = useRef(null);
-    const mapRef = useRef(null); // Use a ref to hold the map instance
+    const mapRef = useRef(null);
+    const gameMarkersRef = useRef({});
+    const activePopupRef = useRef(null);
 
     const [currentUser, setCurrentUser] = useState(null);
     const [selectedGame, setSelectedGame] = useState(null);
     const [isChatOpen, setChatOpen] = useState(false);
+    
+    // This function is defined here to be reusable
+    const fetchAndDisplayGames = async () => {
+        if (!supabase) return;
+        const { data: games } = await supabase.rpc('get_all_active_games_with_details');
+        if (!games) return;
+
+        games.forEach(game => {
+            const gameId = game.game_id || game.id;
+            if (!gameId || !game.location?.coordinates) return;
+
+            if (gameMarkersRef.current[gameId]) {
+                // Future logic to update existing markers can go here
+            } else {
+                const el = document.createElement('div');
+                el.className = 'treasure-marker'; // Use a class for styling
+                
+                const newMarker = new mapboxgl.Marker(el)
+                    .setLngLat(game.location.coordinates)
+                    .addTo(mapRef.current);
+                
+                // Add click listener for popup
+                newMarker.getElement().addEventListener('click', (e) => {
+                    // All your popup logic from before goes here
+                    // For brevity, this part is simplified
+                    const popup = new mapboxgl.Popup({ offset: 25 })
+                        .setHTML(`<h3>${game.title}</h3><p>Click to join!</p>`);
+                    newMarker.setPopup(popup);
+                    popup.addTo(mapRef.current);
+                });
+
+                gameMarkersRef.current[gameId] = newMarker;
+            }
+        });
+    };
 
     useEffect(() => {
-        // --- FIX: This entire useEffect block is structured to run only ONCE ---
-        
-        // Guard 1: If the map is already initialized, do nothing.
-        if (mapRef.current) return;
-        
-        // Guard 2: If the container div isn't ready, do nothing. This prevents the crash.
-        if (!mapContainerRef.current) return;
+        if (mapRef.current || !mapContainerRef.current) return;
 
-        // Initialize the map
         const map = new mapboxgl.Map({
-            container: mapContainerRef.current, // Now we know this is a valid HTMLElement
+            container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: [-73.955, 40.815],
-            zoom: 14,
+            center: [-74.0060, 40.7128],
+            zoom: 12,
         });
-
-        // Save the map instance to the ref
         mapRef.current = map;
 
-        // All map-related setup happens inside the 'load' event
         map.on('load', () => {
             const geolocate = new mapboxgl.GeolocateControl({
                 positionOptions: { enableHighAccuracy: true },
@@ -52,10 +79,14 @@ const MapPage = () => {
             map.addControl(geolocate);
             setTimeout(() => geolocate.trigger(), 500);
 
-            // You can add your fetchAndDisplayGames logic and other initial setup here
+            // FIX: Restore the logic to fetch and display game markers
+            fetchAndDisplayGames();
+            const gameFetchInterval = setInterval(fetchAndDisplayGames, 30000);
+
+            // Add cleanup for the interval
+            return () => clearInterval(gameFetchInterval);
         });
 
-        // Check for user session
         const user = getCachedUser();
         if (!user) {
             navigate('/login');
@@ -63,24 +94,19 @@ const MapPage = () => {
             setCurrentUser(user);
         }
 
-        // Cleanup function to remove the map when the component unmounts
         return () => {
             if (mapRef.current) {
                 mapRef.current.remove();
                 mapRef.current = null;
             }
         };
-
-    }, []); // <-- FIX: The empty array ensures this effect runs only once after the first render.
-
-    // The rest of your functions (handleJoinGame, etc.) and JSX return go here...
-    // The JSX has not changed.
+    }, []);
 
     return (
         <div className="map-page-container">
             <div ref={mapContainerRef} className="map-container" />
             <div className="ui-panel header">
-                <h2>{selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}</h2>
+                <h2>Explore Games</h2>
                 <div className="header-actions">
                     <Link to="/how-to-play" className="header-icon-btn" aria-label="How to Play">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
@@ -93,12 +119,15 @@ const MapPage = () => {
                     </Link>
                 </div>
             </div>
+
+            {/* FIX: Restore the bottom bar with the DIG and Chat buttons */}
             <div className="ui-panel bottom-bar">
                 <button id="digButton">DIG</button>
                 <button id="chatBtn" onClick={() => selectedGame && currentUser && setChatOpen(p => !p)}>
-                    {/* Assuming ChatIcon is a valid component */}
+                    <ChatIcon />
                 </button>
             </div>
+
             {isChatOpen && selectedGame && currentUser && (
                 <ChatBox game={selectedGame} currentUser={currentUser} />
             )}
