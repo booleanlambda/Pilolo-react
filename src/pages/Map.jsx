@@ -55,90 +55,43 @@ const MapPage = () => {
     const [canDig, setCanDig] = useState(false);
     const [isChatOpen, setChatOpen] = useState(false);
 
-    // Effect to update popups when the selected game changes
-    useEffect(() => {
-        Object.values(gameMarkersRef.current).forEach(marker => {
-            const game = marker.gameData;
-            const isSelected = selectedGame?.game_id === game.game_id;
-            if (marker.getPopup()) {
-                marker.getPopup().setHTML(getPopupHTML(game, isSelected));
-            }
-        });
-    }, [selectedGame, games]);
+    const startCountdown = (game) => {
+        if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
+        const countdownId = `countdown-${game.game_id}`;
+        let targetTime;
 
-    // Effect to fetch dig counts when a game is selected
-    useEffect(() => {
-        const updateDigCounts = async () => {
-            if (!currentUser || !selectedGame) {
-                setDigCounts(null);
+        if (game.status === 'pending') {
+            targetTime = new Date(game.start_time).getTime();
+        } else if (game.status === 'in_progress') {
+            const endTime = new Date(game.start_time);
+            endTime.setMinutes(0, 0, 0);
+            endTime.setHours(endTime.getHours() + 1);
+            targetTime = endTime.getTime();
+        } else return;
+
+        activeCountdownInterval.current = setInterval(() => {
+            const el = document.getElementById(countdownId);
+            if (!el) { clearInterval(activeCountdownInterval.current); return; }
+            const distance = targetTime - new Date().getTime();
+            if (distance < 0) {
+                el.innerHTML = "Updating...";
+                clearInterval(activeCountdownInterval.current);
                 return;
             }
-            const { data, error } = await supabase.rpc('get_dig_counts', {
-                user_id_input: currentUser.id,
-                game_id_input: selectedGame.id
-            });
-            if (error || !data || data.length === 0) {
-                setDigCounts(null);
-                return;
-            }
-            const counts = data[0];
-            setDigCounts({
-                standard: Math.max(0, counts.base_allowance - counts.digs_taken),
-                bonus: Math.max(0, counts.bonus_balance - Math.max(0, counts.digs_taken - counts.base_allowance))
-            });
-        };
-        updateDigCounts();
-    }, [selectedGame, currentUser]);
+            const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((distance % (1000 * 60)) / 1000);
+            el.textContent = `${h}h ${m}m ${s}s`;
+        }, 1000);
+    };
 
-    // Effect to check if player can dig
-    useEffect(() => {
-        if (playerLocation && selectedGame && selectedGame.status === 'in_progress') {
-            const gamePoint = turf.point(selectedGame.location.coordinates);
-            const playerPoint = turf.point(playerLocation);
-            const distanceInMeters = turf.distance(playerPoint, gamePoint, { units: 'meters' });
-            setCanDig(distanceInMeters <= 30.5);
-        } else {
-            setCanDig(false);
-        }
-    }, [playerLocation, selectedGame]);
-
-    // Main setup effect - runs only once
+    // Effect for ONE-TIME setup of the map, user, and data fetching interval
     useEffect(() => {
         if (mapRef.current) return;
 
         const user = getCachedUser();
         if (!user) { navigate('/login'); return; }
         setCurrentUser(user);
-
-        const startCountdown = (game) => {
-            if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
-            const countdownId = `countdown-${game.game_id}`;
-            let targetTime;
-    
-            if (game.status === 'pending') {
-                targetTime = new Date(game.start_time).getTime();
-            } else if (game.status === 'in_progress') {
-                const endTime = new Date(game.start_time);
-                endTime.setMinutes(0, 0, 0);
-                endTime.setHours(endTime.getHours() + 1);
-                targetTime = endTime.getTime();
-            } else return;
-    
-            activeCountdownInterval.current = setInterval(() => {
-                const el = document.getElementById(countdownId);
-                if (!el) { clearInterval(activeCountdownInterval.current); return; }
-                const distance = targetTime - new Date().getTime();
-                if (distance < 0) {
-                    el.innerHTML = "Updating...";
-                    clearInterval(activeCountdownInterval.current);
-                    return;
-                }
-                const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const s = Math.floor((distance % (1000 * 60)) / 1000);
-                el.textContent = `${h}h ${m}m ${s}s`;
-            }, 1000);
-        };
 
         window.handleJoinGame = async (gameId) => {
             const gameToJoin = games.find(g => g.game_id === gameId);
@@ -165,12 +118,12 @@ const MapPage = () => {
         });
         mapRef.current = map;
 
+        const fetchGames = async () => {
+            const { data } = await supabase.rpc('get_all_active_games_with_details');
+            setGames(data || []);
+        };
+
         map.on('load', async () => {
-            const fetchGames = async () => {
-                const { data } = await supabase.rpc('get_all_active_games_with_details');
-                setGames(data || []);
-            };
-            
             const checkForActiveGame = async () => {
                 const { data: activeGameGroup } = await supabase.from('user_groups').select('game_id').eq('user_id', user.id).eq('is_active', true).single();
                 if (activeGameGroup) {
@@ -182,7 +135,6 @@ const MapPage = () => {
                     }
                 }
             };
-
             await checkForActiveGame();
 
             const geolocate = new mapboxgl.GeolocateControl({
@@ -194,7 +146,8 @@ const MapPage = () => {
             setTimeout(() => geolocate.trigger(), 500);
 
             fetchGames();
-            setInterval(fetchGames, 15000);
+            const intervalId = setInterval(fetchGames, 15000);
+            return () => clearInterval(intervalId);
         });
 
         return () => {
@@ -205,10 +158,18 @@ const MapPage = () => {
         };
     }, [navigate]);
 
-    // Sync markers whenever the games list changes
+    // Effect to sync markers with the `games` state
     useEffect(() => {
-        if (!mapRef.current || !games.length) return;
+        if (!mapRef.current || !mapRef.current.isStyleLoaded()) return;
         const map = mapRef.current;
+        const currentGameIds = new Set(games.map(g => g.game_id));
+
+        Object.keys(gameMarkersRef.current).forEach(markerId => {
+            if (!currentGameIds.has(markerId)) {
+                gameMarkersRef.current[markerId].remove();
+                delete gameMarkersRef.current[markerId];
+            }
+        });
 
         games.forEach(game => {
             const gameId = game.game_id;
@@ -222,17 +183,44 @@ const MapPage = () => {
                 el.className = 'treasure-marker';
                 const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHTML);
                 const marker = new mapboxgl.Marker(el).setLngLat(game.location.coordinates).setPopup(popup).addTo(map);
-                
                 popup.on('open', () => startCountdown(game));
                 popup.on('close', () => clearInterval(activeCountdownInterval.current));
-
                 marker.gameData = game;
                 gameMarkersRef.current[gameId] = marker;
             }
         });
     }, [games, selectedGame]);
 
-    const handleDig = async () => { /* Your dig logic */ };
+    // Effect to fetch dig counts
+    useEffect(() => {
+        const updateDigCounts = async () => {
+            if (!currentUser || !selectedGame) { setDigCounts(null); return; }
+            const { data } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.id });
+            const counts = data?.[0];
+            if (counts) {
+                setDigCounts({
+                    standard: Math.max(0, counts.base_allowance - counts.digs_taken),
+                    bonus: Math.max(0, counts.bonus_balance - Math.max(0, counts.digs_taken - counts.base_allowance))
+                });
+            } else {
+                setDigCounts(null);
+            }
+        };
+        updateDigCounts();
+    }, [selectedGame, currentUser]);
+
+    // Effect to check if player can dig
+    useEffect(() => {
+        if (playerLocation && selectedGame && selectedGame.status === 'in_progress') {
+            const gamePoint = turf.point(selectedGame.location.coordinates);
+            const playerPoint = turf.point(playerLocation);
+            setCanDig(turf.distance(playerPoint, gamePoint, { units: 'meters' }) <= 30.5);
+        } else {
+            setCanDig(false);
+        }
+    }, [playerLocation, selectedGame]);
+
+    const handleDig = async () => { /* ... Your dig logic ... */ };
 
     return (
         <div className="map-page-container">
