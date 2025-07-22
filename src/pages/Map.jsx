@@ -13,22 +13,22 @@ import '../App.css';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-// Helper function to generate the detailed popup HTML with countdown placeholders
 const getPopupHTML = (game) => {
     let timeInfoHTML = '';
     const startTimeString = game.start_time;
-
     if (game.status && startTimeString && !isNaN(new Date(startTimeString).getTime())) {
         const startTime = new Date(startTimeString);
+        const endTime = new Date(startTime);
+        endTime.setMinutes(0, 0, 0);
+        endTime.setHours(startTime.getHours() + 1);
+        const formattedEndTime = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
         if (game.status === 'pending' && startTime > new Date()) {
-            // Use a specific ID for the countdown-to-start
             timeInfoHTML = `<div class="status-box future">Starts in: <span class="countdown-timer" id="countdown-start-${game.game_id}"></span></div>`;
         } else if (game.status === 'in_progress') {
-            // Use a specific ID for the countdown-to-end
             timeInfoHTML = `<div class="status-box live">Live! Ends in: <span class="countdown-timer" id="countdown-end-${game.game_id}"></span></div>`;
         }
     }
-
     return `
         <div class="game-popup">
             <h3>${game.title}</h3>
@@ -44,30 +44,29 @@ const MapPage = () => {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const gameMarkersRef = useRef({});
-    const activeCountdownInterval = useRef(null); // Use a single ref for the active timer
+    const activeCountdownInterval = useRef(null);
+
+    const [currentUser, setCurrentUser] = useState(null);
+    const [selectedGame, setSelectedGame] = useState(null);
+    // FIX: Restored the missing state declaration for the chat window
+    const [isChatOpen, setChatOpen] = useState(false);
 
     useEffect(() => {
-        // Expose join game function to the window so popups can call it
         window.handleJoinGame = (gameId) => {
             const game = Object.values(gameMarkersRef.current).find(m => m.gameData.game_id === gameId)?.gameData;
             if (game) {
                 console.log("Joining game:", game.title);
                 Swal.fire("Joined!", `You have joined the game: ${game.title}`, "success");
+                setSelectedGame(game); // Set the selected game to enable chat
             }
         };
-        
         return () => { delete window.handleJoinGame; };
     }, []);
 
-    // --- FIX: Revised countdown logic for both start and end times ---
     const startCountdown = (game) => {
-        if (activeCountdownInterval.current) {
-            clearInterval(activeCountdownInterval.current);
-        }
-
+        if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
         const countdownId = `countdown-${game.status === 'pending' ? 'start' : 'end'}-${game.game_id}`;
         let targetTime;
-
         if (game.status === 'pending') {
             targetTime = new Date(game.start_time).getTime();
         } else if (game.status === 'in_progress') {
@@ -76,19 +75,12 @@ const MapPage = () => {
             endTime.setMinutes(0, 0, 0);
             endTime.setHours(startTime.getHours() + 1);
             targetTime = endTime.getTime();
-        } else {
-            return; // No countdown for other statuses
-        }
+        } else return;
 
         activeCountdownInterval.current = setInterval(() => {
             const el = document.getElementById(countdownId);
-            if (!el) {
-                clearInterval(activeCountdownInterval.current);
-                return;
-            }
-
+            if (!el) { clearInterval(activeCountdownInterval.current); return; }
             const distance = targetTime - new Date().getTime();
-
             if (distance < 0) {
                 el.innerHTML = game.status === 'pending' ? "Starting..." : "Ending...";
                 clearInterval(activeCountdownInterval.current);
@@ -101,10 +93,8 @@ const MapPage = () => {
         }, 1000);
     };
 
-
     useEffect(() => {
         if (mapRef.current || !mapContainerRef.current) return;
-
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
@@ -117,38 +107,19 @@ const MapPage = () => {
             if (!supabase || !mapRef.current) return;
             const { data: games } = await supabase.rpc('get_all_active_games_with_details');
             if (!games) return;
-
             games.forEach(game => {
                 const gameId = game.game_id || game.id;
                 if (!gameId || !game.location?.coordinates) return;
-
                 if (gameMarkersRef.current[gameId]) {
                     gameMarkersRef.current[gameId].getPopup().setHTML(getPopupHTML(game));
                     gameMarkersRef.current[gameId].gameData = game;
                 } else {
                     const el = document.createElement('div');
                     el.className = 'treasure-marker';
-
-                    const popup = new mapboxgl.Popup({ offset: 25 })
-                        .setHTML(getPopupHTML(game));
-                    
-                    const marker = new mapboxgl.Marker(el)
-                        .setLngLat(game.location.coordinates)
-                        .setPopup(popup)
-                        .addTo(mapRef.current);
-                    
-                    // When the popup opens, start the appropriate countdown
-                    popup.on('open', () => {
-                        startCountdown(game);
-                    });
-
-                    // When it closes, clear the timer
-                    popup.on('close', () => {
-                        if (activeCountdownInterval.current) {
-                            clearInterval(activeCountdownInterval.current);
-                        }
-                    });
-
+                    const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(getPopupHTML(game));
+                    const marker = new mapboxgl.Marker(el).setLngLat(game.location.coordinates).setPopup(popup).addTo(mapRef.current);
+                    popup.on('open', () => startCountdown(game));
+                    popup.on('close', () => clearInterval(activeCountdownInterval.current));
                     marker.gameData = game;
                     gameMarkersRef.current[gameId] = marker;
                 }
@@ -156,19 +127,15 @@ const MapPage = () => {
         };
 
         map.on('load', () => {
-            const geolocate = new mapboxgl.GeolocateControl({
-                positionOptions: { enableHighAccuracy: true },
-                trackUserLocation: false
-            });
+            const geolocate = new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false });
             map.addControl(geolocate);
             setTimeout(() => geolocate.trigger(), 500);
-            
             fetchAndDisplayGames();
             setInterval(fetchAndDisplayGames, 30000);
         });
 
         const user = getCachedUser();
-        if (!user) navigate('/login');
+        if (user) setCurrentUser(user); else navigate('/login');
         
         return () => {
             if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
@@ -189,12 +156,12 @@ const MapPage = () => {
             </div>
             <div className="ui-panel bottom-bar">
                 <button id="digButton">DIG</button>
-                <button id="chatBtn">
+                <button id="chatBtn" onClick={() => selectedGame && currentUser && setChatOpen(p => !p)}>
                     <ChatIcon />
                 </button>
             </div>
-            {isChatOpen && (
-                <ChatBox />
+            {isChatOpen && selectedGame && currentUser && (
+                <ChatBox game={selectedGame} currentUser={currentUser} />
             )}
         </div>
     );
