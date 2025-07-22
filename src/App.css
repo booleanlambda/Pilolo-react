@@ -177,7 +177,7 @@ body {
 
 .bottom-bar {
   /* FIX: Lift the bar higher from the bottom edge */
-  bottom: 25px;
+  bottom: 100px;
 
   /* FIX: Ensure it doesn't touch the left/right edges */
   left: 20px;
