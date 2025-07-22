@@ -45,7 +45,8 @@ const MapPage = () => {
     const mapRef = useRef(null);
     const gameMarkersRef = useRef({});
     const activeCountdownInterval = useRef(null);
-    const chatMessagesEndRef = useRef(null); // Ref to scroll to bottom
+    const chatMessagesEndRef = useRef(null);
+    const geolocateControlContainerRef = useRef(null); // Ref for custom geolocate container
 
     const [games, setGames] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
@@ -57,7 +58,6 @@ const MapPage = () => {
     const [navCountdownText, setNavCountdownText] = useState('');
     const [messages, setMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
-
 
     useEffect(() => {
         if (!selectedGame) {
@@ -117,23 +117,20 @@ const MapPage = () => {
             supabase.removeChannel(channel);
         };
     }, [selectedGame]);
-    
+
     useEffect(() => {
         chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (chatInput.trim() === '' || !currentUser || !selectedGame) return;
-
         const messageData = {
             game_id: selectedGame.game_id,
             user_id: currentUser.id,
             username: currentUser.user_metadata.username || 'A player',
             text: chatInput.trim()
         };
-
         const { error } = await supabase.from('chat_messages').insert(messageData);
         if (error) {
             Swal.fire('Error', 'Could not send message.', 'error');
@@ -199,12 +196,12 @@ const MapPage = () => {
         const user = getCachedUser();
         if (!user) { navigate('/login'); return; }
         setCurrentUser(user);
-
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
             center: [-73.7230, 40.9832],
             zoom: 14,
+            attributionControl: false
         });
         mapRef.current = map;
 
@@ -230,8 +227,12 @@ const MapPage = () => {
                 positionOptions: { enableHighAccuracy: true },
                 trackUserLocation: true, showUserHeading: true
             });
-            // FIXED: Explicitly set position to prepare for CSS override
-            map.addControl(geolocate, 'top-right');
+            
+            // FIXED: Add the geolocate control to our custom container
+            if (geolocateControlContainerRef.current) {
+                 geolocateControlContainerRef.current.appendChild(geolocate.onAdd(map));
+            }
+
             geolocate.on('geolocate', (e) => setPlayerLocation([e.coords.longitude, e.coords.latitude]));
             setTimeout(() => geolocate.trigger(), 500);
 
@@ -239,7 +240,6 @@ const MapPage = () => {
             const intervalId = setInterval(fetchGames, 15000);
             return () => clearInterval(intervalId);
         });
-
         return () => {
             if (mapRef.current) mapRef.current.remove();
             clearInterval(activeCountdownInterval.current);
@@ -257,12 +257,10 @@ const MapPage = () => {
                 delete gameMarkersRef.current[markerId];
             }
         });
-
         games.forEach(game => {
             const gameId = game.game_id;
             const isSelected = selectedGame?.game_id === gameId;
             const popupHTML = getPopupHTML(game, isSelected);
-
             if (gameMarkersRef.current[gameId]) {
                 gameMarkersRef.current[gameId].getPopup().setHTML(popupHTML);
             } else {
@@ -313,7 +311,6 @@ const MapPage = () => {
             if (error) throw error;
             const result = data?.[0];
             if (!result) throw new Error("No response from server after digging.");
-            
             switch (result.status) {
                 case 'ERROR':
                     Swal.fire({ title: 'Cannot Dig', text: result.message, icon: 'warning' });
@@ -344,6 +341,8 @@ const MapPage = () => {
     return (
         <div className="map-page-container">
             <div ref={mapContainerRef} className="map-container" />
+            <div ref={geolocateControlContainerRef} className="geolocate-container" />
+
             <div className="ui-panel header">
                 <h2>
                     {selectedGame ? `Playing: ${selectedGame.title}` : 'Explore Games'}
@@ -360,34 +359,42 @@ const MapPage = () => {
                     <Link to="/profile" className="header-icon-btn"><svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M12 2a5 5 0 110 10 5 5 0 010-10zm0 12c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/></svg></Link>
                 </div>
             </div>
-            <div className="ui-panel bottom-bar">
-                <button id="digButton" className={canDig ? 'enabled' : ''} disabled={!canDig} onClick={handleDig}>DIG</button>
-                <button id="chatBtn" onClick={() => selectedGame && setChatOpen(p => !p)}>
-                    <ChatIcon />
-                </button>
-            </div>
 
-            {isChatOpen && selectedGame && (
-                <>
-                    <div className="chat-messages-overlay">
-                        {messages.map((msg) => (
-                            <div key={msg.id} className="chat-message">
-                                <strong>{msg.username}:</strong> {msg.text}
-                            </div>
-                        ))}
-                        <div ref={chatMessagesEndRef} />
-                    </div>
-                    <form className="chat-input-bar" onSubmit={handleSendMessage}>
+            {/* FIXED: Unified bottom bar */}
+            <div className={`ui-panel bottom-bar ${isChatOpen ? 'chat-mode' : ''}`}>
+                {!isChatOpen ? (
+                    <>
+                        <button id="digButton" className={canDig ? 'enabled' : ''} disabled={!canDig} onClick={handleDig}>DIG</button>
+                        <button id="chatBtn" onClick={() => selectedGame && setChatOpen(true)}>
+                            <ChatIcon />
+                        </button>
+                    </>
+                ) : (
+                    <form className="chat-input-form" onSubmit={handleSendMessage}>
                         <input
                             type="text"
                             placeholder="Say something..."
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
                             autoComplete="off"
+                            autoFocus
                         />
                         <button type="submit">Send</button>
+                        <button type="button" id="chatCloseBtn" onClick={() => setChatOpen(false)}>&#x2715;</button>
                     </form>
-                </>
+                )}
+            </div>
+
+            {/* Chat messages are now separate from the bar */}
+            {isChatOpen && selectedGame && (
+                <div className="chat-messages-overlay">
+                    {messages.map((msg) => (
+                        <div key={msg.id} className="chat-message">
+                            <strong>{msg.username}:</strong> {msg.text}
+                        </div>
+                    ))}
+                    <div ref={chatMessagesEndRef} />
+                </div>
             )}
         </div>
     );
