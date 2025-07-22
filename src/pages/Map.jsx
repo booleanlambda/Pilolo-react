@@ -85,12 +85,12 @@ const MapPage = () => {
         }, 1000);
     };
 
-    // FIX: This new useEffect ensures the join/exit handlers always have fresh data.
+    // Effect for setting up join/exit handlers
     useEffect(() => {
         window.handleJoinGame = async (gameId) => {
             const gameToJoin = games.find(g => g.game_id === gameId);
             if (!gameToJoin || !currentUser || !playerLocation) {
-                return Swal.fire('Error', 'Could not get user, location, or game data to join.', 'error');
+                return Swal.fire('Error', 'Cannot get user, location, or game data to join.', 'error');
             }
             const { data, error } = await supabase.rpc('join_game', {
                 user_id_input: currentUser.id, game_id_input: gameId,
@@ -111,7 +111,7 @@ const MapPage = () => {
             delete window.handleJoinGame;
             delete window.handleExitGame;
         };
-    }, [games, currentUser, playerLocation]); // Dependencies ensure functions are always up-to-date
+    }, [games, currentUser, playerLocation]);
 
     // Main setup effect - runs only once
     useEffect(() => {
@@ -138,11 +138,13 @@ const MapPage = () => {
             const checkForActiveGame = async () => {
                 const { data: activeGameGroup } = await supabase.from('user_groups').select('game_id').eq('user_id', user.id).eq('is_active', true).single();
                 if (activeGameGroup) {
-                    const { data: gameDetailsArr } = await supabase.rpc('get_game_details', { game_id_input: activeGameGroup.game_id });
-                    if (gameDetailsArr && gameDetailsArr.length > 0) {
-                        const game = gameDetailsArr[0];
-                        if (game.game_id && !game.id) game.id = game.game_id;
-                        setSelectedGame(game);
+                    // We need to wait for the main games list to be fetched to find the full game object
+                    const allGames = await supabase.rpc('get_all_active_games_with_details');
+                    if (allGames.data) {
+                        const activeGame = allGames.data.find(g => g.game_id === activeGameGroup.game_id);
+                        if (activeGame) {
+                            setSelectedGame(activeGame);
+                        }
                     }
                 }
             };
@@ -229,7 +231,46 @@ const MapPage = () => {
         }
     }, [playerLocation, selectedGame]);
 
-    const handleDig = async () => { /* ... Your dig logic ... */ };
+    const handleDig = async () => {
+        if (!canDig) return;
+        try {
+            const { data, error } = await supabase.rpc('dig_treasure', {
+                user_id_input: currentUser.id,
+                game_id_input: selectedGame.id,
+                longitude: playerLocation[0],
+                latitude: playerLocation[1]
+            });
+            if (error) throw error;
+            const result = data?.[0];
+            if (!result) throw new Error("No response from server after digging.");
+            
+            switch (result.status) {
+                case 'ERROR':
+                    Swal.fire({ title: 'Cannot Dig', text: result.message, icon: 'warning' });
+                    break;
+                case 'SUCCESS_HIT':
+                    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+                    Swal.fire({ title: 'You Won!', text: result.message, icon: 'success' });
+                    break;
+                case 'SUCCESS_MISS':
+                    Swal.fire({ title: 'Dug Dirt!', text: result.message, icon: 'info' });
+                    break;
+                default:
+                    Swal.fire('Unknown Outcome', 'Received an unexpected response.', 'question');
+            }
+            // After a dig, refresh the dig counts
+            const { data: countsData } = await supabase.rpc('get_dig_counts', { user_id_input: currentUser.id, game_id_input: selectedGame.id });
+            const counts = countsData?.[0];
+            if (counts) {
+                setDigCounts({
+                    standard: Math.max(0, counts.base_allowance - counts.digs_taken),
+                    bonus: Math.max(0, counts.bonus_balance - Math.max(0, counts.digs_taken - counts.base_allowance))
+                });
+            }
+        } catch (err) {
+            Swal.fire('Client Error', err.message, 'error');
+        }
+    };
 
     return (
         <div className="map-page-container">
