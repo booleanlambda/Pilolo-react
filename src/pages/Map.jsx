@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import Swal from 'sweetalert2';
 import * as turf from '@turf/turf';
+import confetti from 'canvas-confetti';
 
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
@@ -14,21 +15,16 @@ import '../App.css';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-// This is a stable helper function to generate the popup's HTML content.
 const getPopupHTML = (game, isSelected) => {
     let timeInfoHTML = '';
     const startTimeString = game.start_time;
     if (game.status && startTimeString && !isNaN(new Date(startTimeString).getTime())) {
         const startTime = new Date(startTimeString);
-        const endTime = new Date(startTime);
-        endTime.setMinutes(0, 0, 0);
-        endTime.setHours(startTime.getHours() + 1);
-        const formattedEndTime = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
+        const countdownId = `countdown-${game.game_id}`;
         if (game.status === 'pending' && startTime > new Date()) {
-            timeInfoHTML = `<div class="status-box future">Starts: ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+            timeInfoHTML = `<div class="status-box future">Starts in: <span class="countdown-timer" id="${countdownId}"></span></div>`;
         } else if (game.status === 'in_progress') {
-            timeInfoHTML = `<div class="status-box live">Live! Ends at: ${formattedEndTime}</div>`;
+            timeInfoHTML = `<div class="status-box live">Ends in: <span class="countdown-timer" id="${countdownId}"></span></div>`;
         }
     }
     const buttonHTML = isSelected
@@ -49,8 +45,9 @@ const MapPage = () => {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const gameMarkersRef = useRef({});
+    const activeCountdownInterval = useRef(null);
 
-    const [games, setGames] = useState([]); // Holds the list of games from the database
+    const [games, setGames] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
     const [selectedGame, setSelectedGame] = useState(null);
     const [digCounts, setDigCounts] = useState(null);
@@ -58,78 +55,161 @@ const MapPage = () => {
     const [canDig, setCanDig] = useState(false);
     const [isChatOpen, setChatOpen] = useState(false);
 
-    // Effect for ONE-TIME setup of the map, user, and data fetching interval
+    // Effect to update popups when the selected game changes
     useEffect(() => {
-        const user = getCachedUser();
-        if (!user) {
-            navigate('/login');
-            return;
+        Object.values(gameMarkersRef.current).forEach(marker => {
+            const game = marker.gameData;
+            const isSelected = selectedGame?.game_id === game.game_id;
+            if (marker.getPopup()) {
+                marker.getPopup().setHTML(getPopupHTML(game, isSelected));
+            }
+        });
+    }, [selectedGame, games]);
+
+    // Effect to fetch dig counts when a game is selected
+    useEffect(() => {
+        const updateDigCounts = async () => {
+            if (!currentUser || !selectedGame) {
+                setDigCounts(null);
+                return;
+            }
+            const { data, error } = await supabase.rpc('get_dig_counts', {
+                user_id_input: currentUser.id,
+                game_id_input: selectedGame.id
+            });
+            if (error || !data || data.length === 0) {
+                setDigCounts(null);
+                return;
+            }
+            const counts = data[0];
+            setDigCounts({
+                standard: Math.max(0, counts.base_allowance - counts.digs_taken),
+                bonus: Math.max(0, counts.bonus_balance - Math.max(0, counts.digs_taken - counts.base_allowance))
+            });
+        };
+        updateDigCounts();
+    }, [selectedGame, currentUser]);
+
+    // Effect to check if player can dig
+    useEffect(() => {
+        if (playerLocation && selectedGame && selectedGame.status === 'in_progress') {
+            const gamePoint = turf.point(selectedGame.location.coordinates);
+            const playerPoint = turf.point(playerLocation);
+            const distanceInMeters = turf.distance(playerPoint, gamePoint, { units: 'meters' });
+            setCanDig(distanceInMeters <= 30.5);
+        } else {
+            setCanDig(false);
         }
+    }, [playerLocation, selectedGame]);
+
+    // Main setup effect - runs only once
+    useEffect(() => {
+        if (mapRef.current) return;
+
+        const user = getCachedUser();
+        if (!user) { navigate('/login'); return; }
         setCurrentUser(user);
 
-        // Define join/exit handlers that will be put on the window object
-        window.handleJoinGame = (gameId) => {
+        const startCountdown = (game) => {
+            if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
+            const countdownId = `countdown-${game.game_id}`;
+            let targetTime;
+    
+            if (game.status === 'pending') {
+                targetTime = new Date(game.start_time).getTime();
+            } else if (game.status === 'in_progress') {
+                const endTime = new Date(game.start_time);
+                endTime.setMinutes(0, 0, 0);
+                endTime.setHours(endTime.getHours() + 1);
+                targetTime = endTime.getTime();
+            } else return;
+    
+            activeCountdownInterval.current = setInterval(() => {
+                const el = document.getElementById(countdownId);
+                if (!el) { clearInterval(activeCountdownInterval.current); return; }
+                const distance = targetTime - new Date().getTime();
+                if (distance < 0) {
+                    el.innerHTML = "Updating...";
+                    clearInterval(activeCountdownInterval.current);
+                    return;
+                }
+                const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((distance % (1000 * 60)) / 1000);
+                el.textContent = `${h}h ${m}m ${s}s`;
+            }, 1000);
+        };
+
+        window.handleJoinGame = async (gameId) => {
             const gameToJoin = games.find(g => g.game_id === gameId);
-            if (gameToJoin) {
-                // Your actual Supabase RPC call to join the game would go here
-                Swal.fire("Joined!", `You have joined the game: ${gameToJoin.title}`, "success");
-                setSelectedGame(gameToJoin);
-            }
+            if (!gameToJoin || !user || !playerLocation) return;
+            const { data, error } = await supabase.rpc('join_game', {
+                user_id_input: user.id, game_id_input: gameId,
+                player_lon: playerLocation[0], player_lat: playerLocation[1]
+            });
+            if (error || (data && data.startsWith('Error:'))) return Swal.fire('Could Not Join', data?.replace('Error: ', '') || error.message, 'warning');
+            Swal.fire("Joined!", `You have joined the game: ${gameToJoin.title}`, "success");
+            setSelectedGame(gameToJoin);
         };
         window.handleExitGame = () => {
-            // Your actual Supabase RPC call to exit the game would go here
             Swal.fire("Exited", "You have left the game.", "info");
             setSelectedGame(null);
+            setChatOpen(false);
         };
-        
-        // Initialize the map
+
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: [-73.7230, 40.9832], // Harrison, NY
+            center: [-73.7230, 40.9832],
             zoom: 14,
         });
         mapRef.current = map;
 
-        // Function to fetch game data
-        const fetchGames = async () => {
-            const { data } = await supabase.rpc('get_all_active_games_with_details');
-            setGames(data || []);
-        };
+        map.on('load', async () => {
+            const fetchGames = async () => {
+                const { data } = await supabase.rpc('get_all_active_games_with_details');
+                setGames(data || []);
+            };
+            
+            const checkForActiveGame = async () => {
+                const { data: activeGameGroup } = await supabase.from('user_groups').select('game_id').eq('user_id', user.id).eq('is_active', true).single();
+                if (activeGameGroup) {
+                    const { data: gameDetailsArr } = await supabase.rpc('get_game_details', { game_id_input: activeGameGroup.game_id });
+                    if (gameDetailsArr && gameDetailsArr.length > 0) {
+                        const game = gameDetailsArr[0];
+                        if (game.game_id && !game.id) game.id = game.game_id;
+                        setSelectedGame(game);
+                    }
+                }
+            };
 
-        map.on('load', () => {
-            // Setup geolocation
+            await checkForActiveGame();
+
             const geolocate = new mapboxgl.GeolocateControl({
                 positionOptions: { enableHighAccuracy: true },
-                trackUserLocation: true,
-                showUserHeading: true
+                trackUserLocation: true, showUserHeading: true
             });
             map.addControl(geolocate);
             geolocate.on('geolocate', (e) => setPlayerLocation([e.coords.longitude, e.coords.latitude]));
             setTimeout(() => geolocate.trigger(), 500);
 
-            // Fetch games initially, then set up an interval
             fetchGames();
-            const intervalId = setInterval(fetchGames, 15000);
-
-            // Cleanup when the component unmounts
-            return () => clearInterval(intervalId);
+            setInterval(fetchGames, 15000);
         });
 
-        // Main cleanup function for the component
         return () => {
             if (mapRef.current) mapRef.current.remove();
+            clearInterval(activeCountdownInterval.current);
             delete window.handleJoinGame;
             delete window.handleExitGame;
         };
-    }, [navigate]); // This effect runs only once.
+    }, [navigate]);
 
-    // Effect to sync markers with the `games` state
+    // Sync markers whenever the games list changes
     useEffect(() => {
-        if (!mapRef.current) return;
+        if (!mapRef.current || !games.length) return;
         const map = mapRef.current;
 
-        // Add/Update markers
         games.forEach(game => {
             const gameId = game.game_id;
             const isSelected = selectedGame?.game_id === gameId;
@@ -142,42 +222,17 @@ const MapPage = () => {
                 el.className = 'treasure-marker';
                 const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHTML);
                 const marker = new mapboxgl.Marker(el).setLngLat(game.location.coordinates).setPopup(popup).addTo(map);
+                
+                popup.on('open', () => startCountdown(game));
+                popup.on('close', () => clearInterval(activeCountdownInterval.current));
+
                 marker.gameData = game;
                 gameMarkersRef.current[gameId] = marker;
             }
         });
-
-        // Remove old markers that are no longer in the games list
-        const currentGameIds = new Set(games.map(g => g.game_id));
-        Object.keys(gameMarkersRef.current).forEach(markerId => {
-            if (!currentGameIds.has(markerId)) {
-                gameMarkersRef.current[markerId].remove();
-                delete gameMarkersRef.current[markerId];
-            }
-        });
     }, [games, selectedGame]);
 
-    // Effect to fetch dig counts when a game is selected
-    useEffect(() => {
-        const updateDigCounts = async () => {
-            if (!currentUser || !selectedGame) {
-                setDigCounts(null);
-                return;
-            }
-            const { data } = await supabase.rpc('get_dig_counts', {
-                user_id_input: currentUser.id,
-                game_id_input: selectedGame.id
-            });
-            const counts = data?.[0];
-            if (counts) {
-                setDigCounts({
-                    standard: Math.max(0, counts.base_allowance - counts.digs_taken),
-                    bonus: Math.max(0, counts.bonus_balance - Math.max(0, counts.digs_taken - counts.base_allowance))
-                });
-            }
-        };
-        updateDigCounts();
-    }, [selectedGame, currentUser]);
+    const handleDig = async () => { /* Your dig logic */ };
 
     return (
         <div className="map-page-container">
@@ -196,7 +251,7 @@ const MapPage = () => {
                 </div>
             </div>
             <div className="ui-panel bottom-bar">
-                <button id="digButton" className={canDig ? 'enabled' : ''} disabled={!canDig}>DIG</button>
+                <button id="digButton" className={canDig ? 'enabled' : ''} disabled={!canDig} onClick={handleDig}>DIG</button>
                 <button id="chatBtn" onClick={() => selectedGame && setChatOpen(p => !p)}>
                     <ChatIcon />
                 </button>
@@ -211,3 +266,4 @@ const MapPage = () => {
 };
 
 export default MapPage;
+
