@@ -7,7 +7,7 @@ import confetti from 'canvas-confetti';
 
 import { supabase } from '../services/supabase.js';
 import { getCachedUser } from '../services/session.js';
-import ChatBox from '../components/ChatBox.jsx';
+// ChatBox component is no longer needed here
 import ChatIcon from '../components/ChatIcon.jsx';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -46,6 +46,7 @@ const MapPage = () => {
     const mapRef = useRef(null);
     const gameMarkersRef = useRef({});
     const activeCountdownInterval = useRef(null);
+    const chatMessagesEndRef = useRef(null); // Ref to scroll to bottom
 
     const [games, setGames] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
@@ -54,7 +55,12 @@ const MapPage = () => {
     const [playerLocation, setPlayerLocation] = useState(null);
     const [canDig, setCanDig] = useState(false);
     const [isChatOpen, setChatOpen] = useState(false);
-    const [navCountdownText, setNavCountdownText] = useState(''); // State for the nav timer
+    const [navCountdownText, setNavCountdownText] = useState('');
+    
+    // State for new chat implementation
+    const [messages, setMessages] = useState([]);
+    const [chatInput, setChatInput] = useState('');
+
 
     // Effect for the navigation countdown timer
     useEffect(() => {
@@ -62,7 +68,6 @@ const MapPage = () => {
             setNavCountdownText('');
             return;
         }
-
         let targetTime;
         let prefix = '';
 
@@ -79,7 +84,6 @@ const MapPage = () => {
             setNavCountdownText('');
             return;
         }
-
         const intervalId = setInterval(() => {
             const distance = targetTime - new Date().getTime();
             if (distance < 0) {
@@ -95,6 +99,60 @@ const MapPage = () => {
 
         return () => clearInterval(intervalId);
     }, [selectedGame]);
+
+    // Effect for handling real-time chat messages
+    useEffect(() => {
+        if (!selectedGame) return;
+
+        // Fetch initial messages
+        const fetchMessages = async () => {
+            const { data } = await supabase.from('chat_messages')
+                .select('*').eq('game_id', selectedGame.game_id).order('created_at');
+            setMessages(data || []);
+        };
+        fetchMessages();
+
+        // Subscribe to new messages
+        const channel = supabase.channel(`chat:${selectedGame.game_id}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'chat_messages',
+                filter: `game_id=eq.${selectedGame.game_id}`
+            }, (payload) => {
+                setMessages(currentMessages => [...currentMessages, payload.new]);
+            }).subscribe();
+
+        // Cleanup function
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [selectedGame]);
+    
+    // Effect to scroll chat to the bottom
+    useEffect(() => {
+        chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+
+    const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (chatInput.trim() === '' || !currentUser || !selectedGame) return;
+
+        const messageData = {
+            game_id: selectedGame.game_id,
+            user_id: currentUser.id,
+            username: currentUser.user_metadata.username || 'A player',
+            text: chatInput.trim()
+        };
+
+        const { error } = await supabase.from('chat_messages').insert(messageData);
+        if (error) {
+            Swal.fire('Error', 'Could not send message.', 'error');
+        } else {
+            setChatInput(''); // Clear input on successful send
+        }
+    };
 
     const startCountdown = (game) => {
         if (activeCountdownInterval.current) clearInterval(activeCountdownInterval.current);
@@ -126,13 +184,10 @@ const MapPage = () => {
         }, 1000);
     };
 
-    // Effect for setting up join/exit handlers
     useEffect(() => {
         window.handleJoinGame = async (gameId) => {
             const gameToJoin = games.find(g => g.game_id === gameId);
-            if (!gameToJoin || !currentUser || !playerLocation) {
-                return Swal.fire('Error', 'Cannot get user, location, or game data to join.', 'error');
-            }
+            if (!gameToJoin || !currentUser || !playerLocation) return;
             const { data, error } = await supabase.rpc('join_game', {
                 user_id_input: currentUser.id, game_id_input: gameId,
                 player_lon: playerLocation[0], player_lat: playerLocation[1]
@@ -141,23 +196,19 @@ const MapPage = () => {
             Swal.fire("Joined!", `You have joined the game: ${gameToJoin.title}`, "success");
             setSelectedGame(gameToJoin);
         };
-
         window.handleExitGame = () => {
             Swal.fire("Exited", "You have left the game.", "info");
             setSelectedGame(null);
             setChatOpen(false);
         };
-
         return () => {
             delete window.handleJoinGame;
             delete window.handleExitGame;
         };
     }, [games, currentUser, playerLocation]);
 
-    // Main setup effect - runs only once
     useEffect(() => {
         if (mapRef.current) return;
-
         const user = getCachedUser();
         if (!user) { navigate('/login'); return; }
         setCurrentUser(user);
@@ -182,9 +233,7 @@ const MapPage = () => {
                     const allGames = await supabase.rpc('get_all_active_games_with_details');
                     if (allGames.data) {
                         const activeGame = allGames.data.find(g => g.game_id === activeGameGroup.game_id);
-                        if (activeGame) {
-                            setSelectedGame(activeGame);
-                        }
+                        if (activeGame) setSelectedGame(activeGame);
                     }
                 }
             };
@@ -209,7 +258,6 @@ const MapPage = () => {
         };
     }, [navigate]);
 
-    // Effect to sync markers with the `games` and `selectedGame` states
     useEffect(() => {
         if (!mapRef.current || !mapRef.current.isStyleLoaded()) return;
         const map = mapRef.current;
@@ -242,7 +290,6 @@ const MapPage = () => {
         });
     }, [games, selectedGame]);
 
-    // Effect to fetch dig counts
     useEffect(() => {
         const updateDigCounts = async () => {
             if (!currentUser || !selectedGame) { setDigCounts(null); return; }
@@ -253,22 +300,17 @@ const MapPage = () => {
                     standard: Math.max(0, counts.base_allowance - counts.digs_taken),
                     bonus: Math.max(0, counts.bonus_balance - Math.max(0, counts.digs_taken - counts.base_allowance))
                 });
-            } else {
-                setDigCounts(null);
-            }
+            } else setDigCounts(null);
         };
         updateDigCounts();
     }, [selectedGame, currentUser]);
 
-    // Effect to check if player can dig
     useEffect(() => {
         if (playerLocation && selectedGame && selectedGame.status === 'in_progress') {
             const gamePoint = turf.point(selectedGame.location.coordinates);
             const playerPoint = turf.point(playerLocation);
             setCanDig(turf.distance(playerPoint, gamePoint, { units: 'meters' }) <= 30.5);
-        } else {
-            setCanDig(false);
-        }
+        } else setCanDig(false);
     }, [playerLocation, selectedGame]);
 
     const handleDig = async () => {
@@ -336,10 +378,29 @@ const MapPage = () => {
                     <ChatIcon />
                 </button>
             </div>
-            {isChatOpen && selectedGame && currentUser && (
-                <div className="chat-container">
-                    <ChatBox game={selectedGame} currentUser={currentUser} />
-                </div>
+
+            {/* New Chat UI */}
+            {isChatOpen && selectedGame && (
+                <>
+                    <div className="chat-messages-overlay">
+                        {messages.map((msg) => (
+                            <div key={msg.id} className="chat-message">
+                                <strong>{msg.username}:</strong> {msg.text}
+                            </div>
+                        ))}
+                        <div ref={chatMessagesEndRef} />
+                    </div>
+                    <form className="chat-input-bar" onSubmit={handleSendMessage}>
+                        <input
+                            type="text"
+                            placeholder="Say something..."
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            autoComplete="off"
+                        />
+                        <button type="submit">Send</button>
+                    </form>
+                </>
             )}
         </div>
     );
