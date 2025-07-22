@@ -1,3 +1,5 @@
+// In ChatBox.jsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -7,8 +9,11 @@ const ChatBox = ({ game, currentUser }) => {
     const [newMessage, setNewMessage] = useState("");
     const messagesEndRef = useRef(null);
 
-    // Effect to subscribe to chat messages for the selected game
+    // FIX: This useEffect clears messages when you switch games
     useEffect(() => {
+        // Clear previous messages when the game changes
+        setMessages([]);
+
         if (!game) return;
         
         const messagesRef = collection(db, 'chats', String(game.id), 'messages');
@@ -19,35 +24,16 @@ const ChatBox = ({ game, currentUser }) => {
             setMessages(msgs);
         });
 
-        return () => unsubscribe(); // Cleanup subscription on component unmount
-    }, [game]);
+        return () => unsubscribe();
+    }, [game]); // The effect re-runs whenever the game prop changes
 
-    // Effect to auto-scroll to the latest message
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    const handleSendMessage = async (e) => {
-        e.preventDefault();
-        const msg = newMessage.trim();
-        if (!msg) return;
+    const handleSendMessage = async (e) => { /* ... (no changes here) ... */ };
 
-        try {
-            const messagesRef = collection(db, 'chats', String(game.id), 'messages');
-            await addDoc(messagesRef, {
-                text: msg,
-                userId: currentUser.id,
-                // ✅ THE FIX: Using the correct username property
-                username: currentUser.user_metadata?.username,
-                createdAt: serverTimestamp()
-            });
-            setNewMessage("");
-        } catch (err) {
-            console.error("Error sending message:", err);
-            // You could add a user-facing error here
-        }
-    };
-
+    // This is the UI for the chat box itself
     return (
         <div className="ui-panel chat-box">
             <div className="chat-messages">
