@@ -170,16 +170,17 @@ body {
 
 /* Add to App.css to fix the bottom buttons */
 
+/* In App.css */
+
 .bottom-bar {
-  /* Adds padding plus space for the phone's safe area inset (the home bar) */
-  padding-bottom: calc(15px + env(safe-area-inset-bottom));
+  /* FIX: Increased bottom value to lift the bar higher */
+  bottom: 15px;
+  /* FIX: Ensures padding for mobile home indicators and adds top padding */
+  padding: 10px 15px calc(15px + env(safe-area-inset-bottom));
 }
 
-/* You might want to adjust the status box for the new, longer text */
-.status-box {
-    font-size: 0.9em;
-    text-align: center;
+/* Style for the new countdown timer in the popup */
+.countdown-timer {
+  font-weight: bold;
+  color: #ffc107; /* Amber color */
 }
-
-
-
