@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Word Search — Reverse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --color-bg:#FFF3DF; --color-ink:#3D3B3A; --color-muted:#9C8B62;
+    --color-yellow:#F4C542; --color-red:#F1726D; --color-teal:#41C2CF;
+    --color-purple:#A065E2;
+    --color-white:#FFFFFF; --color-stroke:#E8DCC7;
+    --elev-1: 0 1px 0 rgba(255,255,255,.55) inset, 0 1px 0 rgba(0,0,0,.04) inset;
+    --elev-2: 0 6px 14px rgba(0,0,0,.16);
+    --cols: 9; --side-pad: 12px; --grid-gap: 6px; --grid-pad: 6px;
+    --tile: calc((min(100vw, 480px) - (var(--side-pad)*2) - (var(--grid-pad)*2) - (var(--grid-gap)*(var(--cols) - 1))) / var(--cols));
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (min-width:481px){
+    :root{ --tile: calc((480px - (var(--side-pad)*2) - (var(--grid-pad)*2) - (var(--grid-gap)*(var(--cols) - 1))) / var(--cols)); }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--color-bg);color:var(--color-ink);font-family:"Fredoka",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+  .app{max-width:480px;margin:0 auto;padding:12px var(--side-pad) calc(88px + var(--safe-bottom));position:relative}
+  .top{display:flex;align-items:center;justify-content:space-between;margin:8px 0; flex-wrap: wrap; gap: 8px;}
+  .left,.right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tag{color:var(--color-muted);font-size:14px;font-weight:700;letter-spacing:.02em;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.6);box-shadow:var(--elev-1);cursor:pointer;user-select:none}
+  .levels{display:flex;gap:6px}
+  .lvl{padding:6px 10px;border-radius:18px;background:#fff;border:1px solid #e7dcc5;color:#5d5a52;font-weight:700}
+  .lvl.active{background:#eaf6ff;border-color:#d4e9ff;color:#2c3f87}
+  .lvl.locked{opacity:0.6; cursor:not-allowed; background: #f0f0f0;}
+  #timerDisplay.low-time { color: #fff; background: var(--color-red); }
+  .status{color:#8b806e;font-size:13px;margin:10px 0 4px 0; text-align: center;}
+  .progress-bar-container{width:100%;background-color:#E8DCC7;border-radius:4px;height:8px;margin:4px auto 10px auto;overflow:hidden;}
+  .progress-bar{width:0%;height:100%;background-color:var(--color-teal);border-radius:4px;transition:width 0.3s ease-in-out;}
+  .grid-wrap{position:relative;margin:0 auto;padding:var(--grid-pad); min-height: calc(var(--tile) * 9 + var(--grid-gap) * 8);}
+  .grid{display:grid;grid-template-columns:repeat(var(--cols), var(--tile));grid-auto-rows:var(--tile);gap:var(--grid-gap);touch-action:none}
+  .tile{position:relative;width:var(--tile);height:var(--tile);display:grid;place-items:center;font-weight:900;font-size:calc(var(--tile)*.64);user-select:none;color:var(--color-ink); background:var(--color-white); box-shadow:var(--elev-1); cursor:grab;}
+  .tile.found { background: var(--color-purple) !important; color: white; cursor: not-allowed; }
+  .ghost{position:fixed;z-index:9999;width:var(--tile);height:var(--tile);display:grid;place-items:center;pointer-events:none;transform:translate3d(-9999px,-9999px,0);border-radius:4px;color:var(--color-ink);font-weight:900;font-size:calc(var(--tile)*.64);box-shadow:0 15px 30px rgba(0,0,0,.25); background: var(--color-yellow);}
+  .dragging *{user-select:none}
+  .actions{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + var(--safe-bottom));background:linear-gradient(180deg, rgba(255,243,223,0) 0%, rgba(255,243,223,.95) 36%, rgba(255,243,223,1) 100%);display:flex;gap:10px;justify-content:center}
+  .cta{flex: 1 1 0;height:54px;border:none;border-radius:6px;color:#fff;font-size:18px;font-weight:700;box-shadow:var(--elev-2)}
+  .cta.check{background:var(--color-teal)} .cta.reset{background:var(--color-red)}
+  .dev-toggle{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--color-muted);}
+  .switch{position:relative;display:inline-block;width:34px;height:20px;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.4s;border-radius:20px;}
+  .slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background-color:white;transition:.4s;border-radius:50%;}
+  input:checked + .slider{background-color:var(--color-teal);}
+  input:checked + .slider:before{transform:translateX(14px);}
+  .drop-zone-wrap { padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; margin-top: 16px; }
+  .pool-title-wrap { display: flex; justify-content: center; align-items: center; margin-bottom: 8px; }
+  .pool-title { margin:0; text-align: center; color:#8b806e; font-size:14px; letter-spacing:.05em; }
+  #undoBtn { background: none; border: none; padding: 0 8px; cursor: pointer; }
+  .drop-zone { min-height: calc(var(--tile) + 12px); border: 2px dashed var(--color-muted); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; align-items: center; justify-content: center; }
+  .drop-zone.over { border-color: var(--color-teal); background: rgba(65, 194, 207, 0.1); }
+  .dropped-letter { width: var(--tile); height: var(--tile); background: var(--color-yellow); color: white; display: grid; place-items: center; font-weight: 900; font-size: calc(var(--tile)*.64); border-radius: 4px; }
+  .spinner { border: 4px solid rgba(0,0,0,0.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: var(--color-teal); animation: spin 1s ease infinite; position: absolute; top: 50%; left: 50%; margin-top: -18px; margin-left: -18px; }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  .hint-entry { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #eee; }
+  .hint-num { font-size: 14px; font-weight: 700; color: var(--color-muted); min-width: 20px; text-align: right; }
+  .hint-word { font-family: monospace; font-size: 18px; letter-spacing: 2px; color: var(--color-ink); }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <div class="left">
+      <div class="levels" id="langBtns">
+        <button class="lvl active" data-lang="ak">Akan</button>
+        <button class="lvl" data-lang="ga">Ga</button>
+      </div>
+      <button id="hintBtn" class="tag" type="button">HINT</button>
+      <div class="levels" id="levelBtns">
+        <button class="lvl" data-lvl="1">L1</button>
+        <button class="lvl" data-lvl="2">L2</button>
+        <button class="lvl" data-lvl="3">L3</button>
+        <button class="lvl" data-lvl="4">L4</button>
+        <button class="lvl" data-lvl="5">L5</button>
+      </div>
+    </div>
+    <div class="right">
+      <div id="timerDisplay" class="tag">03:00</div>
+      <div class="dev-toggle">
+        <span>DEV MODE</span>
+        <label class="switch">
+          <input type="checkbox" id="devModeToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <p id="statusLine" class="status">Loading...</p>
+  <div class="progress-bar-container"><div id="progressBar" class="progress-bar"></div></div>
+
+  <section id="gridWrap" class="grid-wrap"><div id="grid" class="grid" role="grid"></div></section>
+  
+  <div class="drop-zone-wrap">
+    <div class="pool-title-wrap">
+        <p class="pool-title">DRAG & DROP LETTERS HERE</p>
+        <button id="undoBtn" title="Undo last letter">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h13a5 5 0 0 1 0 10H7M3 9l4-4M3 9l4 4"/></svg>
+        </button>
+    </div>
+    <div id="dropZone" class="drop-zone"></div>
+  </div>
+</main>
+
+<div class="actions" role="group" aria-label="actions">
+  <button class="cta check" id="check" type="button">CHECK</button>
+  <button class="cta reset" id="reset" type="button">RESET</button>
+</div>
+
+<dialog id="hintModal">
+  <article style="padding:0;border:none;background:#fff;border-radius:12px;overflow:hidden;max-width:min(640px,90vw)">
+    <header style="padding:14px 16px;background:#faf7ef;border-bottom:1px solid #e8dcc6">
+      <h3 style="margin:0">Hints</h3>
+    </header>
+    <div id="clues" style="max-height:60svh;overflow:auto;padding:12px 16px"></div>
+    <footer style="padding:12px 16px;display:flex;justify-content:flex-end;border-top:1px solid #e8dcc6">
+      <button id="closeHint" class="tag" type="button">Close</button>
+    </footer>
+  </article>
+</dialog>
+
+<div id="ghost" class="ghost" hidden>?</div>
+
+<script src="toast-bubble.js"></script>
+<script src="wordbank.ak.js"></script>
+<script src="wordbank.en.js"></script>
+<script src="wordbank.ga.js"></script>
+
+<script>
+'use strict';
+
+/* ================== INLINE WORKER ================== */
+const WORKER_SRC = `
+(() => {
+  "use strict";
+  const LETTERS=/[A-ZƆƐ]/gi;
+  const DIRS = {
+    F: [ {dr:0,dc:1,name:"E"}, {dr:1,dc:0,name:"S"} ],
+    ALL: [
+      {dr:0,dc:1,name:"E"},{dr:0,dc:-1,name:"W"}, {dr:1,dc:0,name:"S"},{dr:-1,dc:0,name:"N"},
+      {dr:1,dc:1,name:"SE"},{dr:1,dc:-1,name:"SW"}, {dr:-1,dc:1,name:"NE"},{dr:-1,dc:-1,name:"NW"}
+    ]
+  };
+  const U = s => (s||"").toUpperCase();
+  const inB = (r,c,N) => r>=0 && r<N && c>=0 && c<N;
+  const cleanWord = raw => { const m=(raw||"").match(LETTERS); return m? m.join("").toUpperCase() : ""; };
+  let WORDSET = null;
+  const toSet = (arr)=>{ const s=new Set(); for(const x of arr){ if(x&&x.w) s.add(x.w.toUpperCase()); } return s; };
+  function collectRow(SOL, r, c){ const N=SOL.length; let cc=c; while(cc-1>=0 && SOL[r][cc-1] !== '#') cc--; let out=""; while(cc<N && SOL[r][cc] !== '#'){ out+=SOL[r][cc]; cc++; } return out; }
+  function collectCol(SOL, r, c){ const N=SOL.length; let rr=r; while(rr-1>=0 && SOL[rr-1][c] !== '#') rr--; let out=""; while(rr<N && SOL[rr][c] !== '#'){ out+=SOL[rr][c]; rr++; } return out; }
+  const pickVariant = (lemma, mode) => {
+    const v = lemma.variants||[]; const by = d => v.find(x=>x.dialect===d); const A=by("A"), K=by("K"), F=by("F");
+    const sameAK = A && K && U(A.text)===U(K.text); const sameAKF = sameAK && F && U(A.text)===U(F.text);
+    if (mode==="A" && A) return {...A, badge:"[A]"}; if (mode==="K" && K) return {...K, badge:"[K]"}; if (mode==="F" && F) return {...F, badge:"[F]"};
+    if (mode==="AK" && sameAK) return {text:U(A.text), clue:A.clue, badge:"[AK]"}; if (sameAKF) return {text:U(A.text), clue:A.clue, badge:"[AKF]"};
+    return (A && {...A,badge:"[A]"}) || (K && {...K,badge:"[K]"}) || (F && {...F,badge:"[F]"});
+  };
+  function canPlace(SOL, w, r, c, dr, dc){
+    const N=SOL.length, L=w.length; const endR = r + dr*(L-1), endC = c + dc*(L-1); if (!inB(endR,endC,N)) return false;
+    const preR = r - dr, preC = c - dc; const postR = endR + dr, postC = endC + dc;
+    if (inB(preR,preC,N)  && SOL[preR][preC]  !== '#') return false; if (inB(postR,postC,N) && SOL[postR][postC] !== '#') return false;
+    for (let i=0;i<L;i++){
+      const rr=r+dr*i, cc=c+dc*i; const cell=SOL[rr][cc]; if (cell !== '#' && cell !== w[i]) return false;
+      const old = cell; SOL[rr][cc] = w[i];
+      if (dr === 0 && dc !== 0) { const colWord = collectCol(SOL, rr, cc); if (colWord.length > 1 && !WORDSET.has(colWord)) { SOL[rr][cc] = old; return false; }
+      } else if (dc === 0 && dr !== 0) { const rowWord = collectRow(SOL, rr, cc); if (rowWord.length > 1 && !WORDSET.has(rowWord)) { SOL[rr][cc] = old; return false; }
+      } else if (dr !== 0 && dc !== 0) { const rowWord = collectRow(SOL, rr, cc); if (rowWord.length > 1 && !WORDSET.has(rowWord)) { SOL[rr][cc] = old; return false; }
+        const colWord = collectCol(SOL, rr, cc); if (colWord.length > 1 && !WORDSET.has(colWord)) { SOL[rr][cc] = old; return false; } }
+      SOL[rr][cc] = old;
+    } return true;
+  }
+  function place(SOL, w, r, c, dr, dc, num, dname){
+    const L=w.length; let rr=r, cc=c; 
+    const coords = [];
+    for (let i=0;i<L;i++){ SOL[rr][cc]=w[i]; coords.push({r:rr, c:cc}); rr+=dr; cc+=dc; }
+    return { num, answer:w, coords, dir: dname };
+  }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } }
+  onmessage = (e) => {
+    if ((e.data||{}).cmd !== "gen") return; const cfg = e.data.cfg || {}; const wordsRaw = e.data.bank || [];
+    const mode = e.data.mode || "AKF"; const lang = e.data.langCode || "ak"; const N = 9;
+    const ALPHABET = ['A','B','D','E','Ɛ','F','G','H','I','K','L','M','N','O','Ɔ','P','R','S','T','U','W','Y'];
+    const perWordMax = cfg.perWordMax ?? null; const targetLetters = (cfg.targetLetters === undefined) ? 32 : cfg.targetLetters;
+    const dirsMode = cfg.dirsMode || "F"; const forbidI = !!cfg.forbidForeignI;
+    const excludeSet = new Set((cfg.exclude||[]).map(s => (s||"").toUpperCase())); const seen=new Set(); const candidates=[];
+    for (const lemma of wordsRaw){
+      let raw="", clue="", badge="";
+      if (lang==="ak"){ const v = pickVariant(lemma, mode); if (!v || !v.text) continue; raw = v.text;
+      } else { const v = (lemma.variants||[])[0]; if (!v || !v.text) continue; raw = v.text; }
+      if (excludeSet.has(U(raw))) continue; if (forbidI && /[ìíîïĩİı]/i.test(raw)) continue; const w = cleanWord(raw);
+      if (!w) continue; if (perWordMax && w.length > perWordMax) continue; if (w.length < 2 || w.length > N) continue;
+      if (!seen.has(w)){ seen.add(w); candidates.push({w}); }
+    }
+    if (candidates.length===0){ postMessage({ok:false, error:"No words for criteria"}); return; }
+    shuffle(candidates); WORDSET = toSet(candidates); const DIRSET = dirsMode==="ALL" ? [...DIRS.ALL] : [...DIRS.F];
+    const SOL = Array.from({length:N}, ()=>Array(N).fill("#"));
+    const entries=[]; const used = new Set();
+    let filled=0;
+    for (const cand of candidates) {
+        if (targetLetters !== null && filled >= targetLetters) break;
+        shuffle(DIRSET);
+        let placed = false;
+        const startPositions = [];
+        for(let r=0;r<N;r++) for(let c=0;c<N;c++) startPositions.push({r,c});
+        shuffle(startPositions);
+
+        for (const pos of startPositions) {
+            for (const dir of DIRSET) {
+                if (canPlace(SOL, cand.w, pos.r, pos.c, dir.dr, dir.dc)) {
+                    let newCells=0; for (let i=0;i<cand.w.length;i++){ const rr=pos.r+dir.dr*i, cc=pos.c+dir.dc*i; if (SOL[rr][cc]==="#") newCells++; }
+                    if (targetLetters !== null && (filled + newCells) > targetLetters) continue;
+                    const entry = place(SOL, cand.w, pos.r, pos.c, dir.dr, dir.dc, entries.length + 1, dir.name);
+                    used.add(cand.w); entries.push(entry); filled += newCells;
+                    placed = true;
+                    break;
+                }
+            }
+            if (placed) break;
+        }
+    }
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++) if (SOL[r][c]==="#") SOL[r][c] = ALPHABET[Math.floor(Math.random()*ALPHABET.length)];
+    postMessage({ok:true, RES:{size:N, SOL, entries}});
+  };
+})();
+`;
+
+/* ================== APP STATE ================== */
+const SAVE_KEY = 'akanWordSearchReverseProgress';
+const SCORE_TARGETS = { 1: 5000, 2: 9000, 3: 17000, 4: 25000, 5: Infinity };
+
+let CURRENT_LANG  = 'ak';
+let CURRENT_LEVEL = 1;
+let TOTAL_SCORE = 0;
+let IS_DEV_MODE = false;
+let USED_HINT = false;
+
+let RES=null, SCORE=0;
+let currentWord = [];
+
+let timerInterval = null;
+const TIME_LIMIT = 180;
+let timeLeft = TIME_LIMIT;
+
+const boardEl  = document.getElementById('grid');
+const gridWrapEl = document.getElementById('gridWrap');
+const statusEl = document.getElementById('statusLine');
+const ghost    = document.getElementById('ghost');
+const levelBtnsWrap = document.getElementById('levelBtns');
+const langBtnsWrap = document.getElementById('langBtns');
+const progressBarEl = document.getElementById('progressBar');
+const dropZoneEl = document.getElementById('dropZone');
+const hintModal=document.getElementById('hintModal');
+
+const U = s => (s||'').toUpperCase().normalize('NFC');
+const idFor=(r,c)=>`r${r}c${c}`;
+
+/* ================== SAVE & LOAD PROGRESS ================== */
+function saveProgress() {
+  try {
+    const state = { level: CURRENT_LEVEL, totalScore: TOTAL_SCORE, lang: CURRENT_LANG, devMode: IS_DEV_MODE };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  } catch (e) { console.error("Failed to save progress:", e); }
+}
+
+function loadProgress() {
+  try {
+    const savedState = localStorage.getItem(SAVE_KEY);
+    if (savedState) {
+      const state = JSON.parse(savedState);
+      CURRENT_LEVEL = state.level || 1;
+      TOTAL_SCORE = state.totalScore || 0;
+      CURRENT_LANG = state.lang || 'ak';
+      IS_DEV_MODE = state.devMode || false;
+      document.getElementById('devModeToggle').checked = IS_DEV_MODE;
+    }
+  } catch (e) {
+    console.error("Failed to load progress:", e);
+    CURRENT_LEVEL = 1; TOTAL_SCORE = 0; CURRENT_LANG = 'ak'; IS_DEV_MODE = false;
+  }
+}
+
+/* ================== TIMER FUNCTIONS ================== */
+function updateTimerDisplay() { const timerEl = document.getElementById('timerDisplay'); if (!timerEl) return; const minutes = Math.floor(timeLeft / 60); const seconds = timeLeft % 60; timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`; timerEl.classList.toggle('low-time', timeLeft <= 30 && timeLeft > 0); }
+function stopTimer() { clearInterval(timerInterval); timerInterval = null; }
+function startTimer() { stopTimer(); timeLeft = TIME_LIMIT; updateTimerDisplay(); timerInterval = setInterval(() => { timeLeft--; updateTimerDisplay(); if (timeLeft <= 0) { stopTimer(); window.showNotice?.({title:"Time's Up!", message:'Better luck next time.', type:'error', position:'top-center', icon:'⌛'}); } }, 1000); }
+
+/* ================== HINT FUNCTIONALITY ================== */
+function maskWordWithBlanks(word, level) {
+    if (!word) return "";
+    const len = word.length;
+    let chars = word.split('');
+    if (level === 1) { if (len <= 1) return word; const hideIndex = Math.floor(Math.random() * len); chars[hideIndex] = '_'; return chars.join(''); }
+    if (level === 2) { if (len <= 2) return word[0] + '_'.repeat(len - 1); let indices = Array.from(Array(len).keys()); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } chars[indices[0]] = '_'; chars[indices[1]] = '_'; return chars.join(''); }
+    if (level === 3) { if (len <= 3) return word[0] + '_'.repeat(len - 1); let indices = Array.from(Array(len).keys()); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } chars[indices[0]] = '_'; chars[indices[1]] = '_'; chars[indices[2]] = '_'; return chars.join(''); }
+    if (level >= 4) { if (len <= 1) return word; const showIndex = Math.floor(Math.random() * len); return chars.map((char, index) => index === showIndex ? char : '_').join(''); }
+    return word;
+}
+
+/* ================== WORKER ADAPTER ================== */
+let genWorker=null;
+function spawnGenWorker(){ if(genWorker){ try{genWorker.terminate();}catch{} genWorker=null; } const blob = new Blob([WORKER_SRC], {type:'application/javascript'}); genWorker = new Worker(URL.createObjectURL(blob)); return genWorker; }
+function bankFor(lang){ if(lang==='ak') return window.WORDBANK_AK || []; if(lang==='ga') return window.WORDBANK_GA || []; if(lang==='en') return window.WORDBANK_EN || []; return []; }
+function cfgForLevel(level){ if (level===1) return { perWordMax:4, targetLetters:20,  dirsMode:'F'  }; if (level===2) return { perWordMax:4, targetLetters:40, dirsMode:'F'  }; if (level===3) return { perWordMax:null, targetLetters:60, dirsMode:'F'  }; if (level===4) return { perWordMax:null, targetLetters:80, dirsMode:'F'  }; return { perWordMax:null, targetLetters:null, dirsMode:'ALL' }; }
+async function generateRESWithWorker(){ const cfg = { ...cfgForLevel(CURRENT_LEVEL), forbidForeignI:true, exclude:['Antwĩ'] }; const bank = bankFor(CURRENT_LANG); const w = spawnGenWorker(); return new Promise((resolve,reject)=>{ const t=setTimeout(()=>{ try{w.terminate();}catch{} reject(new Error('timeout')); }, 60000); w.onmessage=(e)=>{ clearTimeout(t); const d=e.data||{}; if(d.ok&&d.RES){ resolve(d.RES);} else { reject(new Error(d.error||'gen failed')); } }; w.onerror=(err)=>{ clearTimeout(t); reject(err?.message||err); }; w.postMessage({ cmd:'gen', cfg, bank, langCode: CURRENT_LANG }); }); }
+
+/* ================== UI / GAME LOGIC ================== */
+function buildBoard(){ 
+    boardEl.innerHTML=''; 
+    for(let r=0;r<9;r++){ 
+        for(let c=0;c<9;c++){ 
+            const letter = RES.SOL[r][c];
+            const tile=document.createElement('div'); 
+            tile.className='tile'; 
+            tile.dataset.coord=idFor(r,c); 
+            tile.textContent = letter;
+            boardEl.appendChild(tile); 
+        } 
+    } 
+}
+
+function updateStatus(){
+    const target = SCORE_TARGETS[CURRENT_LEVEL] || 'Max';
+    const targetText = isFinite(target) ? ` / ${target}` : '';
+    const foundCount = RES.entries.filter(e => e.found).length;
+    statusEl.innerHTML = `Found: ${foundCount}/${RES.entries.length} &nbsp; • &nbsp; Total: ${TOTAL_SCORE}${targetText} &nbsp; • &nbsp; Lvl: ${CURRENT_LEVEL}`;
+    updateProgressBar();
+}
+function updateProgressBar() {
+    if (CURRENT_LEVEL >= 5) {
+        progressBarEl.style.width = '100%';
+        return;
+    }
+    const prevTarget = SCORE_TARGETS[CURRENT_LEVEL - 1] || 0;
+    const currentTarget = SCORE_TARGETS[CURRENT_LEVEL];
+    const scoreInLevel = TOTAL_SCORE - prevTarget;
+    const levelTotal = currentTarget - prevTarget;
+    const percentage = Math.max(0, Math.min(100, (scoreInLevel / levelTotal) * 100));
+    progressBarEl.style.width = `${percentage}%`;
+}
+
+function renderWordBench() {
+    dropZoneEl.innerHTML = '';
+    currentWord.forEach(letterInfo => {
+        const el = document.createElement('div');
+        el.className = 'dropped-letter';
+        el.textContent = letterInfo.letter;
+        dropZoneEl.appendChild(el);
+    });
+}
+
+const levelFactor=lvl=>[1.0,1.1,1.25,1.4,1.6][Math.min(lvl-1,4)];
+const dirBonus=dir=>({E:1,S:1,W:1.05,N:1.05,SE:1.15,NE:1.15,SW:1.25,NW:1.25})[dir]||1;
+
+function checkWord() {
+    const wordStr = currentWord.map(l => l.letter).join('');
+    const foundEntry = RES.entries.find(entry => entry.answer === wordStr && !entry.found);
+
+    if (foundEntry) {
+        foundEntry.found = true;
+        
+        // *** FIX: Restore original letters before applying 'found' class ***
+        currentWord.forEach(letterInfo => {
+            const tile = boardEl.querySelector(`[data-coord="${letterInfo.coord}"]`);
+            if (tile) {
+                tile.textContent = letterInfo.letter;
+            }
+        });
+
+        foundEntry.coords.forEach(coord => {
+            const tile = boardEl.querySelector(`[data-coord="${idFor(coord.r, coord.c)}"]`);
+            if (tile) tile.classList.add('found');
+        });
+        
+        const basePoints = foundEntry.answer.length * 10;
+        const pts = Math.round(basePoints * levelFactor(CURRENT_LEVEL) * dirBonus(foundEntry.dir) * (USED_HINT ? 0.6 : 1));
+        SCORE += pts;
+        TOTAL_SCORE += pts;
+        saveProgress();
+        updateStatus();
+        window.showNotice?.({title:'Mo!',message:`Wahunu “${foundEntry.answer}”.`,type:'success',position:'top-center',icon:'✅',duration:1500});
+        
+        const allFound = RES.entries.every(e => e.found);
+        if (allFound) {
+            stopTimer();
+            window.showNotice?.({title:'Wayaade!', message:'Wadi Inkunim!', type:'success', position:'top-center', icon:'🏆'});
+            maybeLevelUp();
+        }
+        clearWord();
+    }
+}
+
+function clearWord() {
+    currentWord = [];
+    renderWordBench();
+}
+
+function undoLastLetter() {
+    const lastLetter = currentWord.pop();
+    if (lastLetter) {
+        const tile = boardEl.querySelector(`[data-coord="${lastLetter.coord}"]`);
+        if (tile) {
+            tile.textContent = lastLetter.letter;
+        }
+    }
+    renderWordBench();
+}
+
+function maybeLevelUp(){ if (CURRENT_LEVEL >= 5) return; const target = SCORE_TARGETS[CURRENT_LEVEL]; if (TOTAL_SCORE >= target) { CURRENT_LEVEL++; saveProgress(); updateLevelButtons(); window.showNotice?.({title:'Level Up!', message:`Congratulations, you've reached Level ${CURRENT_LEVEL}!`, type:'success', position:'top-center', icon:'🚀'}); } }
+
+function showSpinner(show) {
+    let spinner = gridWrapEl.querySelector('.spinner');
+    if (show) {
+        if (!spinner) {
+            spinner = document.createElement('div');
+            spinner.className = 'spinner';
+            gridWrapEl.appendChild(spinner);
+        }
+        boardEl.style.visibility = 'hidden';
+    } else {
+        if (spinner) {
+            spinner.remove();
+        }
+        boardEl.style.visibility = 'visible';
+    }
+}
+
+async function hardReset(){ 
+    stopTimer(); 
+    SCORE = 0; 
+    USED_HINT = false;
+    showSpinner(true);
+    statusEl.textContent = 'Generating new puzzle...';
+    try { 
+        RES = await generateRESWithWorker(); 
+        currentWord = [];
+        buildBoard(); 
+        renderWordBench();
+        updateStatus(); 
+        updateLevelButtons(); 
+        startTimer(); 
+    } catch(err) { 
+        console.error(err); 
+        window.showNotice?.({title:'Oops',message:'Could not generate a new board. Try RESET again.',type:'error',position:'top-center',icon:'⚠️'}); 
+        statusEl.textContent = 'Error loading. Please reset.';
+    } finally {
+        showSpinner(false);
+    }
+}
+
+/* ================== DRAG & DROP LOGIC (REVISED) ================== */
+let drag = null, isDragging = false;
+function showGhost(letter,x,y){ ghost.textContent=letter; ghost.hidden=false; ghost.style.transform=`translate3d(${x-24}px,${y-24}px,0)`; }
+function moveGhost(x,y){ ghost.style.transform=`translate3d(${x-24}px,${y-24}px,0)`; }
+function hideGhost(){ ghost.hidden=true; ghost.style.transform='translate3d(-9999px,-9999px,0)'; }
+function cleanupDrag(){ if(isDragging){ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); document.removeEventListener('pointercancel',onUp); document.body.classList.remove('dragging'); isDragging=false; } }
+
+function startDragFromGrid(e) {
+    if (isDragging || e.target.classList.contains('found')) return;
+    const tile = e.target.closest('.tile');
+    if (!tile) return;
+
+    const letter = tile.textContent;
+    if (!letter) return;
+
+    const coord = tile.dataset.coord;
+    
+    drag = { letter, coord, originEl: tile };
+    isDragging = true;
+    
+    tile.textContent = ''; 
+
+    document.body.classList.add('dragging');
+    showGhost(letter, e.clientX, e.clientY);
+
+    document.addEventListener('pointermove', onMove, {passive: false});
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+    e.preventDefault();
+}
+
+function onMove(e) {
+    if (!drag) return;
+    e.preventDefault();
+    moveGhost(e.clientX, e.clientY);
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    dropZoneEl.classList.toggle('over', el && dropZoneEl.contains(el));
+}
+
+function onUp(e) {
+    if (!drag) return;
+    cleanupDrag();
+    hideGhost();
+    dropZoneEl.classList.remove('over');
+
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (el && dropZoneEl.contains(el)) {
+        currentWord.push({ letter: drag.letter, coord: drag.coord });
+        renderWordBench();
+        checkWord();
+    } else {
+        drag.originEl.textContent = drag.letter;
+    }
+    
+    drag = null;
+}
+
+/* ================== UI & EVENT LISTENERS ================== */
+document.getElementById('undoBtn').addEventListener('click', undoLastLetter);
+document.getElementById('reset').addEventListener('click', hardReset);
+document.getElementById('check').addEventListener('click', () => {
+    stopTimer();
+    const penalty = 500;
+    TOTAL_SCORE = Math.max(SCORE_TARGETS[CURRENT_LEVEL - 1] || 0, TOTAL_SCORE - penalty);
+    SCORE = 0;
+    saveProgress();
+    RES.entries.forEach(entry => {
+        if (!entry.found) {
+            entry.coords.forEach(coord => {
+                const tile = boardEl.querySelector(`[data-coord="${idFor(coord.r, coord.c)}"]`);
+                if (tile) tile.classList.add('found');
+            });
+        }
+    });
+    window.showNotice?.({title:'Board Revealed', message:`A ${penalty} point penalty was applied.`, type:'error', position:'top-center', icon:'⚠️'});
+    updateStatus();
+    maybeLevelUp();
+});
+
+document.getElementById('hintBtn').addEventListener('click',()=>{
+    USED_HINT=true;
+    const cluesDiv=document.getElementById('clues');
+    const html = RES.entries
+        .sort((a, b) => a.num - b.num)
+        .map(entry => {
+            const status = entry.found ? '✅' : '';
+            const maskedAnswer = maskWordWithBlanks(entry.answer, CURRENT_LEVEL);
+            return `<div class="hint-entry">
+                        <span class="hint-num">${entry.num}.</span>
+                        <span class="hint-word">${maskedAnswer} ${status}</span>
+                    </div>`;
+        }).join('');
+
+    cluesDiv.innerHTML = html;
+    hintModal.showModal();
+});
+document.getElementById('closeHint').addEventListener('click',()=>hintModal.close());
+
+levelBtnsWrap.addEventListener('click',(e)=>{
+  const btn=e.target.closest('.lvl'); if(!btn) return;
+  const lvl = parseInt(btn.dataset.lvl,10);
+  if(!Number.isFinite(lvl) || lvl === CURRENT_LEVEL) return;
+  
+  if (IS_DEV_MODE) {
+      CURRENT_LEVEL = lvl;
+      saveProgress();
+      hardReset();
+  } else {
+      const maxUnlockedLevel = Object.keys(SCORE_TARGETS).findIndex(level => TOTAL_SCORE < SCORE_TARGETS[level]) + 1 || 5;
+      if (lvl <= maxUnlockedLevel) {
+          if (lvl < CURRENT_LEVEL) {
+            TOTAL_SCORE = 0;
+          }
+          CURRENT_LEVEL = lvl;
+          saveProgress();
+          hardReset();
+      } else {
+          window.showNotice?.({title:'Locked', message:'Reach the score target to unlock this level.', type:'info', position:'top-center', icon:'🔒'});
+      }
+  }
+});
+function updateLevelButtons(){
+    const buttons = levelBtnsWrap.querySelectorAll('.lvl');
+    const maxUnlockedLevel = (Object.keys(SCORE_TARGETS).findIndex(key => TOTAL_SCORE < SCORE_TARGETS[key])) + 1 || 5;
+    buttons.forEach(b => {
+        const lvl = parseInt(b.dataset.lvl, 10);
+        b.classList.toggle('active', lvl === CURRENT_LEVEL);
+        b.classList.toggle('locked', !IS_DEV_MODE && lvl > maxUnlockedLevel);
+    });
+}
+langBtnsWrap.addEventListener('click', (e) => {
+  const btn = e.target.closest('.lvl');
+  if (!btn || btn.classList.contains('active')) return;
+  const lang = btn.dataset.lang;
+  if (!lang) return;
+  CURRENT_LANG = lang;
+  TOTAL_SCORE = 0; CURRENT_LEVEL = 1; saveProgress();
+  langBtnsWrap.querySelectorAll('.lvl').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  hardReset();
+});
+document.getElementById('devModeToggle').addEventListener('change', (e) => {
+    IS_DEV_MODE = e.target.checked;
+    saveProgress();
+    updateLevelButtons();
+});
+
+boardEl.addEventListener('pointerdown', startDragFromGrid);
+
+function initializeGame() {
+    loadProgress();
+    langBtnsWrap.querySelectorAll('.lvl').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === CURRENT_LANG);
+    });
+    hardReset();
+}
+initializeGame();
+
+</script>
+</body>
+</html>
