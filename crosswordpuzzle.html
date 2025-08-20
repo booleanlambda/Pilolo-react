@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Akan Word Search — Final</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --color-bg:#FFF3DF; --color-ink:#3D3B3A; --color-muted:#9C8B62;
+    --color-yellow:#F4C542; --color-red:#F1726D; --color-teal:#41C2CF;
+    --color-purple:#A065E2; /* New success color */
+    --color-white:#FFFFFF; --color-stroke:#E8DCC7;
+    --elev-1: 0 1px 0 rgba(255,255,255,.55) inset, 0 1px 0 rgba(0,0,0,.04) inset;
+    --elev-2: 0 6px 14px rgba(0,0,0,.16);
+    --cols: 9; --side-pad: 12px; --grid-gap: 6px; --grid-pad: 6px;
+    --tile: calc((min(100vw, 480px) - (var(--side-pad)*2) - (var(--grid-pad)*2) - (var(--grid-gap)*(var(--cols) - 1))) / var(--cols));
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (min-width:481px){
+    :root{ --tile: calc((480px - (var(--side-pad)*2) - (var(--grid-pad)*2) - (var(--grid-gap)*(var(--cols) - 1))) / var(--cols)); }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--color-bg);color:var(--color-ink);font-family:"Fredoka",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+  .app{max-width:480px;margin:0 auto;padding:12px var(--side-pad) calc(88px + var(--safe-bottom));position:relative}
+  .top{display:flex;align-items:center;justify-content:space-between;margin:8px 0; flex-wrap: wrap; gap: 8px;}
+  .left,.right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tag{color:var(--color-muted);font-size:14px;font-weight:700;letter-spacing:.02em;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.6);box-shadow:var(--elev-1);cursor:pointer;user-select:none}
+  .levels{display:flex;gap:6px}
+  .lvl{padding:6px 10px;border-radius:18px;background:#fff;border:1px solid #e7dcc5;color:#5d5a52;font-weight:700}
+  .lvl.active{background:#eaf6ff;border-color:#d4e9ff;color:#2c3f87}
+  .lvl.locked{opacity:0.6; cursor:not-allowed; background: #f0f0f0;}
+  #timerDisplay.low-time { color: #fff; background: var(--color-red); }
+  .status{color:#8b806e;font-size:13px;margin:10px 0 4px 0; text-align: center;}
+  .progress-bar-container{width:100%;background-color:#E8DCC7;border-radius:4px;height:8px;margin:4px auto 10px auto;overflow:hidden;}
+  .progress-bar{width:0%;height:100%;background-color:var(--color-teal);border-radius:4px;transition:width 0.3s ease-in-out;}
+  .grid-wrap{position:relative;margin:0 auto;padding:var(--grid-pad)}
+  .grid{display:grid;grid-template-columns:repeat(var(--cols), var(--tile));grid-auto-rows:var(--tile);gap:var(--grid-gap);touch-action:none}
+  .cell{width:var(--tile);height:var(--tile);position:relative;background:var(--color-white);box-shadow:var(--elev-1)}
+  .cell::after{content:"";position:absolute;inset:2px;border:2px solid var(--color-stroke)}
+  .cell.block{background:#F1E6C9}
+  .cell.block::after{border-color:#DFCFAA}
+  .tile{position:absolute;inset:0;display:grid;place-items:center;font-weight:900;font-size:calc(var(--tile)*.64);user-select:none;color:#fff}
+  .tile.lock{background:#FFF7D7;border:1px solid #EEDB9A;color:#6c6a58}
+  .tile.editable {border: 2px solid #d8c9a5; background-color: #f0f8ff; box-shadow: none;}
+  .tile.filled{box-shadow:var(--elev-2)}
+  .c1{background:var(--color-yellow)!important} .c2{background:var(--color-red)!important} .c3{background:var(--color-teal)!important}
+  .tile.done{background:var(--color-purple)!important;color:#fff!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,.45)}
+  .tile.drop-ok{outline:3px dashed #41c2cf; outline-offset:-3px}
+  .num{position:absolute;left:6px;top:6px;padding:2px 6px;background:#EAF6FF;color:#5a789e;border:1.5px solid #D4E9FF;border-radius:8px;font-weight:700;font-size:.72rem}
+  .pool-title{text-align:center;color:#8b806e;font-size:14px;letter-spacing:.05em;margin:14px 0 8px}
+  .pool{display:grid;grid-template-columns:repeat(9, var(--tile));gap:8px;justify-content:center;touch-action:none}
+  .chip{position:relative;width:var(--tile);height:var(--tile);display:grid;place-items:center;border-radius:0;font-weight:900;font-size:calc(var(--tile)*.58);color:#fff;box-shadow:var(--elev-2);cursor:grab;user-select:none;border:1px solid rgba(0,0,0,.08);touch-action:none}
+  .chip:active{cursor:grabbing;transform:translateY(1px)}
+  .chip.placeholder{background:transparent;color:#b9a98b;border:2px dashed #c6b792;box-shadow:none;cursor:default;pointer-events:none;opacity:.6}
+  .ghost{position:fixed;z-index:9999;width:var(--tile);height:var(--tile);display:grid;place-items:center;pointer-events:none;transform:translate3d(-9999px,-9999px,0);border-radius:0;color:#fff;font-weight:900;font-size:calc(var(--tile)*.58);box-shadow:0 15px 30px rgba(0,0,0,.25), 0 2px 0 rgba(0,0,0,.08) inset;border:2px solid rgba(0,0,0,.08);opacity:.95}
+  .ghost.c1{background:var(--color-yellow)} .ghost.c2{background:var(--color-red)} .ghost.c3{background:var(--color-teal)}
+  .dragging *{user-select:none}
+  .actions{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + var(--safe-bottom));background:linear-gradient(180deg, rgba(255,243,223,0) 0%, rgba(255,243,223,.95) 36%, rgba(255,243,223,1) 100%);display:flex;gap:10px;justify-content:center}
+  .cta{flex:0 0 46%;height:54px;border:none;border-radius:6px;color:#fff;font-size:18px;font-weight:700;box-shadow:var(--elev-2)}
+  .cta.check{background:var(--color-teal)} .cta.reset{background:var(--color-red)}
+  .tile, .tile.editable { overflow:hidden; background-image:none !important; }
+  .tile::before,.tile::after,.tile.editable::before,.tile.editable::after{ content:none !important; border:0 !important; background:none !important; box-shadow:none !important; -webkit-mask:none !important; mask:none !important; }
+  .dev-toggle{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--color-muted);}
+  .switch{position:relative;display:inline-block;width:34px;height:20px;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.4s;border-radius:20px;}
+  .slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background-color:white;transition:.4s;border-radius:50%;}
+  input:checked + .slider{background-color:var(--color-teal);}
+  input:checked + .slider:before{transform:translateX(14px);}
+  .hint-entry { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #eee; }
+  .hint-num { font-size: 14px; font-weight: 700; color: var(--color-muted); min-width: 20px; text-align: right; }
+  .hint-icon { font-size: 24px; flex-shrink: 0; }
+  .hint-word { font-family: monospace; font-size: 18px; letter-spacing: 2px; color: var(--color-ink); }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <div class="left">
+      <div class="levels" id="langBtns">
+        <button class="lvl active" data-lang="ak">Akan</button>
+        <button class="lvl" data-lang="ga">Ga</button>
+      </div>
+      <button id="hintBtn" class="tag" type="button">HINT</button>
+      <div class="levels" id="levelBtns">
+        <button class="lvl" data-lvl="1">L1</button>
+        <button class="lvl" data-lvl="2">L2</button>
+        <button class="lvl" data-lvl="3">L3</button>
+        <button class="lvl" data-lvl="4">L4</button>
+        <button class="lvl" data-lvl="5">L5</button>
+      </div>
+    </div>
+    <div class="right">
+      <div id="timerDisplay" class="tag">03:00</div>
+      <div class="dev-toggle">
+        <span>DEV MODE</span>
+        <label class="switch">
+          <input type="checkbox" id="devModeToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <button id="shuffleBtn" class="tag" type="button">SHUFFLE</button>
+    </div>
+  </header>
+
+  <p id="statusLine" class="status">Loading...</p>
+  <div class="progress-bar-container"><div id="progressBar" class="progress-bar"></div></div>
+
+  <section class="grid-wrap"><div id="grid" class="grid" role="grid"></div></section>
+  <p class="pool-title">LETTER POOL</p>
+  <section id="pool" class="pool"></section>
+</main>
+
+<div class="actions" role="group" aria-label="actions">
+  <button class="cta check" id="check" type="button">CHECK</button>
+  <button class="cta reset" id="reset" type="button">RESET</button>
+</div>
+
+<dialog id="hintModal">
+  <article style="padding:0;border:none;background:#fff;border-radius:12px;overflow:hidden;max-width:min(640px,90vw)">
+    <header style="padding:14px 16px;background:#faf7ef;border-bottom:1px solid #e8dcc6">
+      <h3 style="margin:0">Hints</h3>
+    </header>
+    <div id="clues" style="max-height:60svh;overflow:auto;padding:12px 16px"></div>
+    <footer style="padding:12px 16px;display:flex;justify-content:flex-end;border-top:1px solid #e8dcc6">
+      <button id="closeHint" class="tag" type="button">Close</button>
+    </footer>
+  </article>
+</dialog>
+
+<div id="ghost" class="ghost" hidden>?</div>
+
+<script src="toast-bubble.js"></script>
+<script src="wordbank.ak.js"></script>
+<script src="wordbank.en.js"></script>
+<script src="wordbank.ga.js"></script>
+
+<script>
+'use strict';
+
+/* ================== INLINE WORKER (Unchanged) ================== */
+const WORKER_SRC = `
+(() => {
+  "use strict";
+  const LETTERS=/[A-ZƆƐ]/gi;
+  const DIRS = {
+    F: [ {dr:0,dc:1,name:"E"}, {dr:1,dc:0,name:"S"} ],
+    ALL: [
+      {dr:0,dc:1,name:"E"},{dr:0,dc:-1,name:"W"}, {dr:1,dc:0,name:"S"},{dr:-1,dc:0,name:"N"},
+      {dr:1,dc:1,name:"SE"},{dr:1,dc:-1,name:"SW"}, {dr:-1,dc:1,name:"NE"},{dr:-1,dc:-1,name:"NW"}
+    ]
+  };
+  const U = s => (s||"").toUpperCase();
+  const inB = (r,c,N) => r>=0 && r<N && c>=0 && c<N;
+  const cleanWord = raw => { const m=(raw||"").match(LETTERS); return m? m.join("").toUpperCase() : ""; };
+  let WORDSET = null;
+  const toSet = (arr)=>{ const s=new Set(); for(const x of arr){ if(x&&x.w) s.add(x.w.toUpperCase()); } return s; };
+  function collectRow(SOL, r, c){ const N=SOL.length; let cc=c; while(cc-1>=0 && SOL[r][cc-1] !== '#') cc--; let out=""; while(cc<N && SOL[r][cc] !== '#'){ out+=SOL[r][cc]; cc++; } return out; }
+  function collectCol(SOL, r, c){ const N=SOL.length; let rr=r; while(rr-1>=0 && SOL[rr-1][c] !== '#') rr--; let out=""; while(rr<N && SOL[rr][c] !== '#'){ out+=SOL[rr][c]; rr++; } return out; }
+  const pickVariant = (lemma, mode) => {
+    const v = lemma.variants||[]; const by = d => v.find(x=>x.dialect===d); const A=by("A"), K=by("K"), F=by("F");
+    const sameAK = A && K && U(A.text)===U(K.text); const sameAKF = sameAK && F && U(A.text)===U(F.text);
+    if (mode==="A" && A) return {...A, badge:"[A]"}; if (mode==="K" && K) return {...K, badge:"[K]"}; if (mode==="F" && F) return {...F, badge:"[F]"};
+    if (mode==="AK" && sameAK) return {text:U(A.text), clue:A.clue, badge:"[AK]"}; if (sameAKF) return {text:U(A.text), clue:A.clue, badge:"[AKF]"};
+    return (A && {...A,badge:"[A]"}) || (K && {...K,badge:"[K]"}) || (F && {...F,badge:"[F]"});
+  };
+  function canPlace(SOL, w, r, c, dr, dc){
+    const N=SOL.length, L=w.length; const endR = r + dr*(L-1), endC = c + dc*(L-1); if (!inB(endR,endC,N)) return false;
+    const preR = r - dr, preC = c - dc; const postR = endR + dr, postC = endC + dc;
+    if (inB(preR,preC,N)  && SOL[preR][preC]  !== '#') return false; if (inB(postR,postC,N) && SOL[postR][postC] !== '#') return false;
+    for (let i=0;i<L;i++){
+      const rr=r+dr*i, cc=c+dc*i; const cell=SOL[rr][cc]; if (cell !== '#' && cell !== w[i]) return false;
+      const old = cell; SOL[rr][cc] = w[i];
+      if (dr === 0 && dc !== 0) { const colWord = collectCol(SOL, rr, cc); if (colWord.length > 1 && !WORDSET.has(colWord)) { SOL[rr][cc] = old; return false; }
+      } else if (dc === 0 && dr !== 0) { const rowWord = collectRow(SOL, rr, cc); if (rowWord.length > 1 && !WORDSET.has(rowWord)) { SOL[rr][cc] = old; return false; }
+      } else if (dr !== 0 && dc !== 0) { const rowWord = collectRow(SOL, rr, cc); if (rowWord.length > 1 && !WORDSET.has(rowWord)) { SOL[rr][cc] = old; return false; }
+        const colWord = collectCol(SOL, rr, cc); if (colWord.length > 1 && !WORDSET.has(colWord)) { SOL[rr][cc] = old; return false; } }
+      SOL[rr][cc] = old;
+    } return true;
+  }
+  function place(SOL, CELL_INDEX, START_MAP, idFor, w, r, c, dr, dc, num, clue, badge, dname, icon){
+    const L=w.length; let rr=r, cc=c; const placed = { num, row:r+1, col:c+1, dir:dname, answer:w, clue, badge, icon };
+    for (let i=0;i<L;i++){ const cid=idFor(rr,cc); SOL[rr][cc]=w[i]; (CELL_INDEX[cid]||(CELL_INDEX[cid]=[])).push(placed); rr+=dr; cc+=dc; }
+    START_MAP[idFor(r,c)] = placed; return placed;
+  }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } }
+  onmessage = (e) => {
+    if ((e.data||{}).cmd !== "gen") return; const cfg = e.data.cfg || {}; const wordsRaw = e.data.bank || [];
+    const mode = e.data.mode || "AKF"; const lang = e.data.langCode || "ak"; const N = 9;
+    const perWordMax = cfg.perWordMax ?? null; const targetLetters = (cfg.targetLetters === undefined) ? 32 : cfg.targetLetters;
+    const dirsMode = cfg.dirsMode || "F"; const forbidI = !!cfg.forbidForeignI;
+    const excludeSet = new Set((cfg.exclude||[]).map(s => (s||"").toUpperCase())); const seen=new Set(); const candidates=[];
+    for (const lemma of wordsRaw){
+      let raw="", clue="", badge="";
+      if (lang==="ak"){ const v = pickVariant(lemma, mode); if (!v || !v.text) continue; raw = v.text; clue = v.clue || ""; badge = v.badge || "";
+      } else { const v = (lemma.variants||[])[0]; if (!v || !v.text) continue; raw = v.text; clue = v.clue || ""; }
+      if (excludeSet.has(U(raw))) continue; if (forbidI && /[ìíîïĩİı]/i.test(raw)) continue; const w = cleanWord(raw);
+      if (!w) continue; if (perWordMax && w.length > perWordMax) continue; if (w.length < 2 || w.length > N) continue;
+      if (!seen.has(w)){ seen.add(w); candidates.push({w,clue,badge, icon: lemma.icon}); }
+    }
+    if (candidates.length===0){ const SOL=Array.from({length:N},()=>Array(N).fill("#")); postMessage({ok:true, RES:{size:N,SOL,entries:[],START_MAP:{},CELL_INDEX:{},mask:[],filled:0,target:targetLetters}}); return; }
+    shuffle(candidates); WORDSET = toSet(candidates); const DIRSET = dirsMode==="ALL" ? [...DIRS.ALL] : [...DIRS.F];
+    const SOL = Array.from({length:N}, ()=>Array(N).fill("#")); const idFor = (r,c)=>"r"+(r+1)+"c"+(c+1);
+    const START_MAP={}, CELL_INDEX={}, entries=[]; const used = new Set();
+    const BUDGET_MS = 10, TRIES_PER_SLICE=240, MAX_SLICES=240; let filled=0, sincePlaced=0, slice=0;
+    function step(){
+      slice++; const t0 = performance.now(); let tries=0;
+      while (tries<TRIES_PER_SLICE && (performance.now()-t0)<BUDGET_MS){
+        tries++; let cand=null, guard=0;
+        while(guard<8){ cand = candidates[(Math.random()*candidates.length)|0]; if (cand && !used.has(cand.w)) break; cand=null; guard++; }
+        if (!cand){ sincePlaced++; continue; }
+        const dir = DIRSET[(Math.random()*DIRSET.length)|0]; const r = (Math.random()*N)|0, c=(Math.random()*N)|0;
+        if (!canPlace(SOL,cand.w,r,c,dir.dr,dir.dc)){ sincePlaced++; continue; }
+        let newCells=0; for (let i=0;i<cand.w.length;i++){ const rr=r+dir.dr*i, cc=c+dir.dc*i; if (SOL[rr][cc]==="#") newCells++; }
+        if (targetLetters!==null && (filled+newCells)>targetLetters){ sincePlaced++; continue; }
+        const placed = place(SOL,CELL_INDEX,START_MAP,idFor,cand.w,r,c,dir.dr,dir.dc,entries.length+1,cand.clue,cand.badge,dir.name, cand.icon);
+        used.add(cand.w); entries.push(placed); filled += newCells; sincePlaced = 0;
+      }
+      const stalled = sincePlaced > TRIES_PER_SLICE*4; const gridFull = filled >= N*N; const metTarget = (targetLetters!==null) && (filled >= targetLetters);
+      const tooLong = slice >= MAX_SLICES;
+      if (stalled || gridFull || metTarget || tooLong){ const mask=[]; for(let r=0;r<N;r++) for(let c=0;c<N;c++) if (SOL[r][c]!=="#") mask.push(idFor(r,c));
+        postMessage({ok:true, RES:{size:N,SOL,entries,START_MAP,CELL_INDEX,mask,filled,target:targetLetters}}); return;
+      } setTimeout(step,0);
+    } setTimeout(step,0);
+  };
+})();
+`;
+
+/* ================== APP STATE & NEW PROGRESSION LOGIC ================== */
+const SAVE_KEY = 'akanWordSearchProgress';
+const SCORE_TARGETS = { 1: 5000, 2: 9000, 3: 17000, 4: 25000, 5: Infinity };
+
+let LANG_MANIFEST = window.LANGUAGES || [{code:'ak', name:'Akan', defaultDialect:'AKF'}];
+let CURRENT_LANG  = 'ak';
+let CURRENT_MODE  = (LANG_MANIFEST.find(l=>l.code===CURRENT_LANG)?.defaultDialect) || 'AKF';
+let CURRENT_LEVEL = 1;
+let TOTAL_SCORE = 0;
+let IS_DEV_MODE = false;
+
+let RES=null, MISSING_MASK=null, POOL=[], placements={};
+let SCORE=0, USED_HINT=false;
+
+let timerInterval = null;
+const TIME_LIMIT = 180;
+let timeLeft = TIME_LIMIT;
+
+const boardEl  = document.getElementById('grid');
+const poolEl   = document.getElementById('pool');
+const statusEl = document.getElementById('statusLine');
+const ghost    = document.getElementById('ghost');
+const levelBtnsWrap = document.getElementById('levelBtns');
+const langBtnsWrap = document.getElementById('langBtns');
+const progressBarEl = document.getElementById('progressBar');
+
+const U = s => (s||'').toUpperCase().normalize('NFC');
+const idFor=(r,c)=>`r${r}c${c}`;
+const DIR = {
+    E:  { dr: 0, dc:  1 }, W:  { dr: 0, dc: -1 }, S:  { dr:  1, dc: 0 }, N:  { dr: -1, dc: 0 },
+    SE: { dr: 1, dc:  1 }, SW: { dr: 1, dc: -1 }, NE: { dr: -1, dc: 1 }, NW: { dr: -1, dc: -1 }
+};
+const ALPHABET=['A','B','D','E','Ɛ','F','G','H','I','K','L','M','N','O','Ɔ','P','R','S','T','U','W','Y'];
+
+/* ================== SAVE & LOAD PROGRESS ================== */
+function saveProgress() {
+  try {
+    const state = {
+      level: CURRENT_LEVEL,
+      totalScore: TOTAL_SCORE,
+      lang: CURRENT_LANG,
+      devMode: IS_DEV_MODE,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  } catch (e) { console.error("Failed to save progress:", e); }
+}
+
+function loadProgress() {
+  try {
+    const savedState = localStorage.getItem(SAVE_KEY);
+    if (savedState) {
+      const state = JSON.parse(savedState);
+      CURRENT_LEVEL = state.level || 1;
+      TOTAL_SCORE = state.totalScore || 0;
+      CURRENT_LANG = state.lang || 'ak';
+      IS_DEV_MODE = state.devMode || false;
+      document.getElementById('devModeToggle').checked = IS_DEV_MODE;
+    }
+  } catch (e) {
+    console.error("Failed to load progress:", e);
+    CURRENT_LEVEL = 1; TOTAL_SCORE = 0; CURRENT_LANG = 'ak'; IS_DEV_MODE = false;
+  }
+}
+
+/* ================== TIMER FUNCTIONS (Unchanged) ================== */
+function updateTimerDisplay() { const timerEl = document.getElementById('timerDisplay'); if (!timerEl) return; const minutes = Math.floor(timeLeft / 60); const seconds = timeLeft % 60; timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`; timerEl.classList.toggle('low-time', timeLeft <= 30 && timeLeft > 0); }
+function stopTimer() { clearInterval(timerInterval); timerInterval = null; }
+function startTimer() { stopTimer(); timeLeft = TIME_LIMIT; updateTimerDisplay(); timerInterval = setInterval(() => { timeLeft--; updateTimerDisplay(); if (timeLeft <= 0) { stopTimer(); window.showNotice?.({title:"Time's Up!", message:'Better luck next time.', type:'error', position:'top-center', icon:'⌛'}); document.getElementById('pool').style.pointerEvents = 'none'; document.getElementById('check').disabled = true; } }, 1000); }
+
+/* ================== NEW MASK WORD FUNCTION ================== */
+function maskWordWithBlanks(word, level) {
+    if (!word) return "";
+    const len = word.length;
+    let chars = word.split('');
+    
+    if (level === 1) {
+        if (len <= 1) return word;
+        const hideIndex = Math.floor(Math.random() * len);
+        chars[hideIndex] = '_';
+        return chars.join('');
+    }
+    
+    if (level === 2) {
+        if (len <= 2) return word[0] + '_'.repeat(len - 1);
+        let indices = Array.from(Array(len).keys());
+        for(let i=indices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; }
+        chars[indices[0]] = '_';
+        chars[indices[1]] = '_';
+        return chars.join('');
+    }
+
+    if (level === 3) {
+        if (len <= 3) return word[0] + '_'.repeat(len - 1);
+        let indices = Array.from(Array(len).keys());
+        for(let i=indices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; }
+        chars[indices[0]] = '_';
+        chars[indices[1]] = '_';
+        chars[indices[2]] = '_';
+        return chars.join('');
+    }
+
+    if (level >= 4) {
+        if (len <= 1) return word;
+        const showIndex = Math.floor(Math.random() * len);
+        return chars.map((char, index) => index === showIndex ? char : '_').join('');
+    }
+
+    return word; // Default for any other case
+}
+
+
+/* ================== WORKER ADAPTER (Unchanged) ================== */
+let genWorker=null;
+function spawnGenWorker(){ if(genWorker){ try{genWorker.terminate();}catch{} genWorker=null; } const blob = new Blob([WORKER_SRC], {type:'application/javascript'}); genWorker = new Worker(URL.createObjectURL(blob)); return genWorker; }
+function bankFor(lang){ if(lang==='ak') return window.WORDBANK_AK || []; if(lang==='ga') return window.WORDBANK_GA || []; if(lang==='en') return window.WORDBANK_EN || []; return []; }
+function cfgForLevel(level){ if (level===1) return { perWordMax:4, targetLetters:20,  dirsMode:'F'  }; if (level===2) return { perWordMax:4, targetLetters:40, dirsMode:'F'  }; if (level===3) return { perWordMax:null, targetLetters:60, dirsMode:'F'  }; if (level===4) return { perWordMax:null, targetLetters:80, dirsMode:'F'  }; return { perWordMax:null, targetLetters:null, dirsMode:'ALL' }; }
+async function generateRESWithWorker(){ const cfg = { ...cfgForLevel(CURRENT_LEVEL), forbidForeignI:true, exclude:['Antwĩ'] }; const bank = bankFor(CURRENT_LANG); const w = spawnGenWorker(); return new Promise((resolve,reject)=>{ const t=setTimeout(()=>{ try{w.terminate();}catch{} reject(new Error('timeout')); }, 60000); w.onmessage=(e)=>{ clearTimeout(t); const d=e.data||{}; if(d.ok&&d.RES){ resolve(d.RES);} else { reject(new Error(d.error||'gen failed')); } }; w.onerror=(err)=>{ clearTimeout(t); reject(err?.message||err); }; w.postMessage({ cmd:'gen', cfg, bank, langCode: CURRENT_LANG, mode: CURRENT_MODE }); }); }
+
+/* ================== UI / GAME LOGIC (UPDATED) ================== */
+function prefillSomeCells(count=3){ const picks=[]; const starts=RES.entries.map(e=>idFor(e.row,e.col)); for(let i=starts.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[starts[i],starts[j]]=[starts[j],starts[i]];} for(let i=0;i<Math.min(count,starts.length);i++) picks.push(starts[i]); if(picks.length<count){ const rest=RES.mask.filter(id=>!picks.includes(id)); for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];} while(picks.length<count&&rest.length) picks.push(rest.pop()); } picks.forEach(id=>MISSING_MASK.delete(id)); }
+
+// NEW: Dynamic word numbering function
+function updateWordNumbers() {
+    // First, remove all existing number indicators from the board
+    boardEl.querySelectorAll('.num').forEach(n => n.remove());
+
+    // Loop through every word defined for the puzzle
+    for (const entry of RES.entries) {
+        // If the word is already marked as complete, skip it
+        if (entry.completed) {
+            continue;
+        }
+
+        // Get the direction vectors (e.g., right, down, etc.)
+        const v = DIR[entry.dir];
+        let r = entry.row, c = entry.col;
+
+        // Check each letter position in the word
+        for (let i = 0; i < entry.answer.length; i++) {
+            const cid = idFor(r, c);
+            const tile = boardEl.querySelector(`.tile[data-coord="${cid}"]`);
+
+            // Find the FIRST tile in the word that is empty
+            if (tile && !tile.textContent) {
+                const cell = tile.parentElement; // The number goes on the parent cell
+                
+                // Create and append the new number element
+                const num = document.createElement('div');
+                num.className = 'num';
+                num.textContent = String(entry.num);
+                cell.appendChild(num);
+                
+                // Break the inner loop since we only number the first empty spot
+                break; 
+            }
+            // Move to the next letter's coordinates
+            r += v.dr;
+            c += v.dc;
+        }
+    }
+}
+
+function buildBoard(){ 
+    boardEl.innerHTML=''; 
+    document.documentElement.style.setProperty('--cols', 9); 
+    boardEl.style.gridTemplateColumns=`repeat(9, var(--tile))`; 
+    for(let r=1;r<=9;r++){ 
+        for(let c=1;c<=9;c++){ 
+            const id=idFor(r,c), sol=RES.SOL[r-1][c-1]; 
+            const cell=document.createElement('div'); 
+            if(sol!=='#'){ 
+                cell.className='cell'; 
+                const tile=document.createElement('div'); 
+                tile.className='tile'; 
+                tile.dataset.coord=id; 
+                if(MISSING_MASK.has(id)){ 
+                    tile.classList.add('editable'); 
+                    tile.dataset.id=id; 
+                    tile.textContent=placements[id]||''; 
+                    if(tile.textContent){ 
+                        tile.classList.add('filled'); 
+                        const savedColor = tile.dataset.color; 
+                        if(savedColor) tile.classList.add(savedColor); 
+                    } 
+                }else{ 
+                    tile.classList.add('lock'); 
+                    tile.textContent=sol; 
+                } 
+                cell.appendChild(tile); 
+            } else { 
+                cell.className='cell block'; 
+                cell.setAttribute('aria-hidden','true'); 
+            } 
+            boardEl.appendChild(cell); 
+        } 
+    } 
+    updateWordNumbers();
+}
+
+function updateStatus(){
+    const target = SCORE_TARGETS[CURRENT_LEVEL] || 'Max';
+    const targetText = isFinite(target) ? ` / ${target}` : '';
+    statusEl.innerHTML = `Game Score: ${SCORE} &nbsp; • &nbsp; Total: ${TOTAL_SCORE}${targetText} &nbsp; • &nbsp; Lvl: ${CURRENT_LEVEL}`;
+    updateProgressBar();
+}
+function updateProgressBar() {
+    if (CURRENT_LEVEL >= 5) {
+        progressBarEl.style.width = '100%';
+        return;
+    }
+    const prevTarget = SCORE_TARGETS[CURRENT_LEVEL - 1] || 0;
+    const currentTarget = SCORE_TARGETS[CURRENT_LEVEL];
+    const scoreInLevel = TOTAL_SCORE - prevTarget;
+    const levelTotal = currentTarget - prevTarget;
+    const percentage = Math.max(0, Math.min(100, (scoreInLevel / levelTotal) * 100));
+    progressBarEl.style.width = `${percentage}%`;
+}
+function requiredLetters(){ const out=[]; for(let r=1;r<=9;r++) for(let c=1;c<=9;c++){ const id=idFor(r,c); if(RES.SOL[r-1][c-1]!=='#' && MISSING_MASK.has(id)) out.push(RES.SOL[r-1][c-1]); } return out; }
+const countsFromPool=arr=>{const m=new Map();arr.forEach(ch=>m.set(ch,(m.get(ch)||0)+1));return m;};
+function makePool(){ const base=requiredLetters().slice(); const target=(CURRENT_LEVEL<=2)?Math.max(base.length+6,22):Math.max(base.length+8,30); while(base.length<target) base.push(ALPHABET[Math.floor(Math.random()*ALPHABET.length)]); for(let i=base.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[base[i],base[j]]=[base[j],base[i]];} return base; }
+function poolToRack(pool){ const m=countsFromPool(pool); const uniq=Array.from(m.keys()); for(let i=uniq.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[uniq[i],uniq[j]]=[uniq[j],uniq[i]];} const out=[],limit=Math.min(9,uniq.length); for(let k=0;k<limit;k++) out.push({ch:uniq[k],count:m.get(uniq[k])}); return out; }
+function renderPool(){ poolEl.innerHTML=''; const items = poolToRack(POOL); items.forEach((it,i)=>{ const colorClass = (i%3===0?'c1':i%3===1?'c2':'c3'); const b = document.createElement('button'); b.type='button'; b.className = `chip ${colorClass}`; b.dataset.letter = it.ch; b.dataset.color  = colorClass; b.innerHTML = `<span>${it.ch}</span>`; b.addEventListener('pointerdown', startDragFromPool, {passive:false}); poolEl.appendChild(b); }); updateStatus(); }
+const levelFactor=lvl=>[1.0,1.1,1.25,1.4,1.6][Math.min(lvl-1,4)];
+const dirBonus=dir=>({E:1,S:1,W:1.05,N:1.05,SE:1.15,NE:1.15,SW:1.25,NW:1.25})[dir]||1;
+function awardForEntry(entry,usedHint=false){ const base=entry.answer.length*10; const pts=Math.round(base*levelFactor(CURRENT_LEVEL)*dirBonus(entry.dir)*(usedHint?0.6:1)); SCORE += pts; TOTAL_SCORE += pts; saveProgress(); updateStatus(); }
+function maybeLevelUp(){ if (CURRENT_LEVEL >= 5) return; const target = SCORE_TARGETS[CURRENT_LEVEL]; if (TOTAL_SCORE >= target) { CURRENT_LEVEL++; saveProgress(); updateLevelButtons(); window.showNotice?.({title:'Level Up!', message:`Congratulations, you've reached Level ${CURRENT_LEVEL}!`, type:'success', position:'top-center', icon:'🚀'}); } }
+async function hardReset(){ stopTimer(); SCORE = 0; document.getElementById('pool').style.pointerEvents = 'auto'; document.getElementById('check').disabled = false; try{ RES=await generateRESWithWorker(); placements={}; const mask=[]; for(let r=1;r<=9;r++) for(let c=1;c<=9;c++) if(RES.SOL[r-1][c-1]!=='#') mask.push(idFor(r,c)); RES.mask=mask; MISSING_MASK=new Set(RES.mask); prefillSomeCells(3); POOL=makePool(); USED_HINT=false; buildBoard(); renderPool(); scanAllCompletions({silent:true}); updateStatus(); updateLevelButtons(); startTimer(); }catch(err){ console.error(err); window.showNotice?.({title:'Oops',message:'Could not generate a new board. Try RESET again.',type:'error',position:'top-center',icon:'⚠️'}); } }
+let drag=null, lastHover=null, isDragging=false;
+function showGhost(letter,x,y){ ghost.textContent=letter; ghost.hidden=false; ghost.style.transform=`translate3d(${x-32}px,${y-32}px,0)`; }
+function moveGhost(x,y){ ghost.style.transform=`translate3d(${x-32}px,${y-32}px,0)`; }
+function hideGhost(){ ghost.hidden=true; ghost.style.transform='translate3d(-9999px,-9999px,0)'; }
+function highlightTarget(el,on){ if(!el) return; if(el.classList.contains('editable')&&!el.classList.contains('done')) el.classList.toggle('drop-ok', !!on); }
+function cleanupDrag(){ if(isDragging){ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); document.removeEventListener('pointercancel',onUp); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); highlightTarget(lastHover,false); hideGhost(); document.body.classList.remove('dragging'); isDragging=false; lastHover=null; } }
+function getTileAtPoint(x,y){ let el=document.elementFromPoint(x,y); if(!el) return null; if(el.classList?.contains('tile')) return el; return el.closest?.('.tile')||null; }
+function findNearestEditable(x,y,radius=28){ const tiles=boardEl.querySelectorAll('.tile.editable:not(.done)'); let best=null,bestD=Infinity; for(const t of tiles){ const r=t.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; const d=Math.hypot(cx-x, cy-y); if(d<bestD && d<=radius){ best=t; bestD=d; } } return best; }
+function startDragFromPool(e){ if(isDragging){ cleanupDrag(); return; } const btn=e.currentTarget; const letter=btn.dataset.letter; const color=btn.dataset.color||'c3'; if(!letter) return; const ph=document.createElement('div'); ph.className='chip placeholder'; ph.setAttribute('aria-hidden','true'); ph.innerHTML=`<span>${letter}</span>`; btn.replaceWith(ph); drag={letter,source:'pool',pointerId:e.pointerId,originBtn:btn,placeholder:ph,colorClass:color}; isDragging=true; document.body.classList.add('dragging'); ghost.className=`ghost ${color}`; showGhost(letter,e.clientX||0,e.clientY||0); document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp); document.addEventListener('pointercancel',onUp); document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp); e.preventDefault(); e.stopPropagation(); }
+boardEl.addEventListener('pointerdown',e=>{ if(isDragging){ cleanupDrag(); return; } const t=e.target; if(!(t?.classList?.contains('tile'))) return; if(t.classList.contains('lock')||t.classList.contains('done')) return; if(!t.textContent) return; const letter=t.textContent; const existingColor=[...t.classList].find(c=>/^c[1-3]$/.test(c))||null; drag={letter,source:'cell',originEl:t,pointerId:e.pointerId,colorClass:existingColor}; t.textContent=''; t.classList.remove('filled','c1','c2','c3'); updateWordNumbers(); isDragging=true; document.body.classList.add('dragging'); ghost.className=`ghost ${existingColor||'c3'}`; showGhost(letter,e.clientX,e.clientY); document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp); document.addEventListener('pointercancel',onUp); document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp); e.preventDefault(); e.stopPropagation(); });
+function onMove(e){ if(!drag) return; e.preventDefault(); moveGhost(e.clientX,e.clientY); let el=getTileAtPoint(e.clientX,e.clientY) || findNearestEditable(e.clientX,e.clientY,20); if(el!==lastHover){ highlightTarget(lastHover,false); lastHover=el; highlightTarget(lastHover,true); } }
+function placeLetter(tile, letter, colorClass){ const id = tile.dataset.id; if (tile.textContent) POOL.push(U(tile.textContent)); tile.textContent = letter; tile.classList.add('filled'); tile.classList.remove('c1','c2','c3'); if(colorClass){ tile.classList.add(colorClass); tile.dataset.color=colorClass; } placements[id] = letter; checkEntryCompletion(id); scanAllCompletions({silent:false}); renderPool(); updateStatus(); updateWordNumbers(); }
+function onUp(e){ if(!drag) return; document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); document.removeEventListener('pointercancel',onUp); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); highlightTarget(lastHover,false); hideGhost(); document.body.classList.remove('dragging'); let target=getTileAtPoint(e.clientX,e.clientY); if(!target) target=findNearestEditable(e.clientX,e.clientY,28); const ok=target?.classList?.contains('editable') && !target.classList.contains('done'); if(ok){ if(drag.source==='pool'){ const idx=POOL.indexOf(drag.letter); if(idx>-1) POOL.splice(idx,1); drag.placeholder?.parentNode?.removeChild(drag.placeholder); placeLetter(target,drag.letter,drag.colorClass); } else if(drag.source==='cell'){ placeLetter(target,drag.letter,drag.colorClass); } }else{ if(drag.source==='cell' && drag.originEl){ drag.originEl.textContent=drag.letter; drag.originEl.classList.add('filled'); if(drag.colorClass) drag.originEl.classList.add(drag.colorClass); } if(drag.source==='pool'){ drag.placeholder?.parentNode?.replaceChild(drag.originBtn,drag.placeholder); } } updateWordNumbers(); drag=null; lastHover=null; isDragging=false; }
+function isEntryComplete(entry){ if (entry.completed) return false; const v=DIR[entry.dir]; let r=entry.row, c=entry.col; for(let i=0;i<entry.answer.length;i++){ const cid=idFor(r,c); if(MISSING_MASK.has(cid)){ const el=boardEl.querySelector(`.tile[data-id="${cid}"]`); if(!el || U(el.textContent)!==U(RES.SOL[r-1][c-1])) return false; } r+=v.dr; c+=v.dc; } return true; }
+function markEntryDone(entry, {silent=false} = {}){ if (entry.completed) return; entry.completed = true; const v=DIR[entry.dir]; let r=entry.row, c=entry.col; for(let i=0;i<entry.answer.length;i++){ const cid=idFor(r,c); const t=boardEl.querySelector(`.tile[data-coord="${cid}"]`); if(t){ t.classList.remove('editable','filled','drop-ok','c1','c2','c3'); t.classList.add('done'); t.removeAttribute('data-id'); t.textContent = RES.SOL[r-1][c-1]; } MISSING_MASK.delete(cid); r+=v.dr; c+=v.dc; } awardForEntry(entry,USED_HINT); USED_HINT=false; updateStatus(); updateWordNumbers(); if (MISSING_MASK.size === 0) { stopTimer(); window.showNotice?.({title:'Wayaade!', message:'Wadi Inkunim!', type:'success', position:'top-center', icon:'🏆'}); maybeLevelUp(); } if(!silent){ window.showNotice?.({title:'Mo!',message:`Wahunu “${entry.answer}”.`,type:'success',position:'top-center',icon:'✅',duration:2000}); } }
+function scanAllCompletions({silent=false} = {}){ for(const entry of RES.entries){ if(entry.completed) continue; if(isEntryComplete(entry)) markEntryDone(entry, {silent}); } }
+function checkEntryCompletion(cellId){ const list=(RES.CELL_INDEX?.[cellId])||[]; for(const entry of list){ if(isEntryComplete(entry)){ markEntryDone(entry); } } }
+
+const hintModal=document.getElementById('hintModal');
+document.getElementById('hintBtn').addEventListener('click',()=>{
+    USED_HINT=true;
+    const cluesDiv=document.getElementById('clues');
+    cluesDiv.style.display = 'block';
+    
+    // REVISED: Hint generation with numbering, icons removed
+    const html = RES.entries
+        .sort((a, b) => a.num - b.num)
+        .map(entry => {
+            const maskedAnswer = maskWordWithBlanks(entry.answer, CURRENT_LEVEL);
+            return `<div class="hint-entry">
+                        <span class="hint-num">${entry.num}.</span>
+                        <span class="hint-word">${maskedAnswer}</span>
+                    </div>`;
+        }).join('');
+
+    cluesDiv.innerHTML = html;
+    hintModal.showModal();
+});
+document.getElementById('closeHint').addEventListener('click',()=>hintModal.close());
+document.getElementById('shuffleBtn').addEventListener('click',()=>{ renderPool(); });
+
+document.getElementById('check').addEventListener('click',()=>{
+  stopTimer();
+
+  if (IS_DEV_MODE) {
+    for(let r=1;r<=9;r++){ for(let c=1;c<=9;c++){ const id=idFor(r,c); if(!MISSING_MASK.has(id)) continue; const tile=boardEl.querySelector(`.tile[data-id="${id}"]`); if(tile){ tile.textContent = RES.SOL[r-1][c-1]; tile.classList.add('filled'); } } }
+    for(const entry of RES.entries){ if(!entry.completed) markEntryDone(entry, {silent:true}); }
+    window.showNotice?.({title:'Solved!',message:'All words filled in.',type:'success',position:'top-center',icon:'🎉',duration:1600});
+  } else {
+    const penalty = 500;
+    TOTAL_SCORE = Math.max(SCORE_TARGETS[CURRENT_LEVEL - 1] || 0, TOTAL_SCORE - penalty);
+    SCORE = 0;
+    saveProgress();
+    for(let r=1;r<=9;r++){ for(let c=1;c<=9;c++){ const id=idFor(r,c); const tile=boardEl.querySelector(`.tile[data-coord="${id}"]`); if(tile && tile.classList.contains('editable')){ tile.textContent = RES.SOL[r-1][c-1]; tile.classList.remove('editable'); tile.classList.add('done'); } } }
+    window.showNotice?.({title:'Board Revealed', message:`A ${penalty} point penalty was applied.`, type:'error', position:'top-center', icon:'⚠️'});
+  }
+
+  MISSING_MASK.clear();
+  POOL.length = 0;
+  renderPool();
+  updateStatus();
+  updateWordNumbers();
+  maybeLevelUp();
+});
+
+document.getElementById('reset').addEventListener('click',()=>{ hardReset(); });
+
+levelBtnsWrap.addEventListener('click',(e)=>{
+  const btn=e.target.closest('.lvl'); if(!btn) return;
+  const lvl = parseInt(btn.dataset.lvl,10);
+  if(!Number.isFinite(lvl) || lvl === CURRENT_LEVEL) return;
+  
+  if (IS_DEV_MODE) {
+      CURRENT_LEVEL = lvl;
+      saveProgress();
+      hardReset();
+  } else {
+      const maxUnlockedLevel = Object.keys(SCORE_TARGETS).findIndex(level => TOTAL_SCORE < SCORE_TARGETS[level]) + 1 || 5;
+      if (lvl <= maxUnlockedLevel) {
+          if (lvl < CURRENT_LEVEL) {
+            TOTAL_SCORE = 0;
+          }
+          CURRENT_LEVEL = lvl;
+          saveProgress();
+          hardReset();
+      } else {
+          window.showNotice?.({title:'Locked', message:'Reach the score target to unlock this level.', type:'info', position:'top-center', icon:'🔒'});
+      }
+  }
+});
+function updateLevelButtons(){
+    const buttons = levelBtnsWrap.querySelectorAll('.lvl');
+    const maxUnlockedLevel = (Object.keys(SCORE_TARGETS).findIndex(key => TOTAL_SCORE < SCORE_TARGETS[key])) + 1 || 5;
+    buttons.forEach(b => {
+        const lvl = parseInt(b.dataset.lvl, 10);
+        b.classList.toggle('active', lvl === CURRENT_LEVEL);
+        b.classList.toggle('locked', !IS_DEV_MODE && lvl > maxUnlockedLevel);
+    });
+}
+langBtnsWrap.addEventListener('click', (e) => {
+  const btn = e.target.closest('.lvl');
+  if (!btn || btn.classList.contains('active')) return;
+  const lang = btn.dataset.lang;
+  if (!lang) return;
+  CURRENT_LANG = lang;
+  TOTAL_SCORE = 0; CURRENT_LEVEL = 1; saveProgress();
+  langBtnsWrap.querySelectorAll('.lvl').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  hardReset();
+});
+document.getElementById('devModeToggle').addEventListener('change', (e) => {
+    IS_DEV_MODE = e.target.checked;
+    saveProgress();
+    updateLevelButtons();
+});
+
+function initializeGame() {
+    loadProgress();
+    langBtnsWrap.querySelectorAll('.lvl').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === CURRENT_LANG);
+    });
+    hardReset();
+}
+initializeGame();
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && drag){ if(drag.source==='cell' && drag.originEl){ drag.originEl.textContent=drag.letter; drag.originEl.classList.add('filled'); if(drag.colorClass) drag.originEl.classList.add(drag.colorClass); } else if(drag.source==='pool'){ drag.placeholder?.parentNode?.replaceChild(drag.originBtn,drag.placeholder); } cleanupDrag(); drag=null; lastHover=null; } });
+window.addEventListener('blur',()=>{ if(drag){ if(drag.source==='cell' && drag.originEl){ drag.originEl.textContent=drag.letter; drag.originEl.classList.add('filled'); if(drag.colorClass) drag.originEl.classList.add(drag.colorClass); } else if(drag.source==='pool'){ drag.placeholder?.parentNode?.replaceChild(drag.originBtn,drag.placeholder); } cleanupDrag(); drag=null; lastHover=null; } });
+</script>
+</body>
+</html>
+
